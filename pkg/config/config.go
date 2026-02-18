@@ -174,6 +174,15 @@ type ObjectConfig struct {
 			HourEnd         int  `default:"23" json:"hourEnd"`
 			RunAtStartDelay int  `default:"0" json:"runAtStartDelay"`
 		} `json:"linkScenesSchedule"`
+		PmvMatchSchedule struct {
+			Enabled         bool `default:"false" json:"enabled"`
+			HourInterval    int  `default:"12" json:"hourInterval"`
+			UseRange        bool `default:"false" json:"useRange"`
+			MinuteStart     int  `default:"0" json:"minuteStart"`
+			HourStart       int  `default:"0" json:"hourStart"`
+			HourEnd         int  `default:"23" json:"hourEnd"`
+			RunAtStartDelay int  `default:"0" json:"runAtStartDelay"`
+		} `json:"pmvMatchSchedule"`
 	} `json:"cron"`
 	Storage struct {
 		MatchOhash bool     `default:"false" json:"match_ohash"`

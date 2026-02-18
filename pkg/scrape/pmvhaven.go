@@ -27,6 +27,82 @@ type PMVHavenCandidate struct {
 	ThumbnailURL string `json:"thumbnail_url"`
 }
 
+func EnrichPMVHavenCandidateThumbnail(c PMVHavenCandidate) (PMVHavenCandidate, error) {
+	sceneURL := canonicalSceneURL(c.SceneURL)
+	if sceneURL == "" {
+		return c, fmt.Errorf("invalid scene url")
+	}
+
+	client := resty.New().
+		SetTimeout(25*time.Second).
+		SetRetryCount(2).
+		SetHeader("User-Agent", UserAgent)
+
+	req := client.R()
+	SetupRestyRequest("pmvhaven-scraper", req)
+
+	resp, err := req.Get(sceneURL)
+	if err != nil {
+		return c, err
+	}
+	if resp.StatusCode() < 200 || resp.StatusCode() >= 300 {
+		return c, fmt.Errorf("pmvhaven scene fetch failed with status %d", resp.StatusCode())
+	}
+
+	if thumb := ParsePMVHavenSceneHTMLForThumbnail(resp.String()); thumb != "" {
+		c.ThumbnailURL = thumb
+	}
+	if title := ParsePMVHavenSceneHTMLForTitle(resp.String()); title != "" {
+		c.Title = title
+	}
+	return c, nil
+}
+
+func ParsePMVHavenSceneHTMLForThumbnail(htmlBody string) string {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlBody))
+	if err != nil {
+		return ""
+	}
+
+	thumb := strings.TrimSpace(firstNonEmpty(
+		attrVal(doc.Find(`meta[property="og:image"]`).First(), "content"),
+		attrVal(doc.Find(`meta[name="twitter:image"]`).First(), "content"),
+		attrVal(doc.Find(`video[poster]`).First(), "poster"),
+	))
+	if thumb != "" {
+		return absoluteURL(thumb)
+	}
+
+	doc.Find(`script[type="application/ld+json"]`).EachWithBreak(func(_ int, script *goquery.Selection) bool {
+		text := strings.TrimSpace(script.Text())
+		if text == "" {
+			return true
+		}
+		thumb = parseJSONLDThumbnail(text)
+		return thumb == ""
+	})
+	if thumb != "" {
+		return absoluteURL(thumb)
+	}
+	return ""
+}
+
+func ParsePMVHavenSceneHTMLForTitle(htmlBody string) string {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlBody))
+	if err != nil {
+		return ""
+	}
+
+	title := strings.TrimSpace(firstNonEmpty(
+		attrVal(doc.Find(`meta[property="og:title"]`).First(), "content"),
+		attrVal(doc.Find(`meta[name="twitter:title"]`).First(), "content"),
+	))
+	if title == "" {
+		title = strings.TrimSpace(doc.Find("title").First().Text())
+	}
+	return cleanPMVHavenTitle(title)
+}
+
 func SearchPMVHaven(query string, limit int) ([]PMVHavenCandidate, error) {
 	q := url.QueryEscape(strings.TrimSpace(query))
 	searchURLs := []string{
@@ -360,6 +436,43 @@ func parseJSONLDCandidates(data string) []PMVHavenCandidate {
 	return out
 }
 
+func parseJSONLDThumbnail(data string) string {
+	root := gjson.Parse(data)
+	thumb := ""
+
+	var visit func(node gjson.Result)
+	visit = func(node gjson.Result) {
+		if thumb != "" || !node.Exists() {
+			return
+		}
+		if node.IsObject() {
+			for _, path := range []string{"thumbnailUrl", "image.url", "image"} {
+				v := strings.TrimSpace(node.Get(path).String())
+				if v != "" {
+					thumb = v
+					return
+				}
+			}
+			node.ForEach(func(_, child gjson.Result) bool {
+				visit(child)
+				return thumb == ""
+			})
+			return
+		}
+		if node.IsArray() {
+			for _, child := range node.Array() {
+				visit(child)
+				if thumb != "" {
+					return
+				}
+			}
+		}
+	}
+
+	visit(root)
+	return strings.TrimSpace(thumb)
+}
+
 func firstAttr(sel *goquery.Selection, selectors ...string) string {
 	for _, selector := range selectors {
 		n := sel.Find(selector).First()
@@ -517,4 +630,18 @@ func titleFromSceneURL(sceneURL string) string {
 	base = regexp.MustCompile(`\s+[a-f0-9]{24}$`).ReplaceAllString(base, "")
 	base = regexp.MustCompile(`\s+`).ReplaceAllString(strings.TrimSpace(base), " ")
 	return base
+}
+
+func cleanPMVHavenTitle(raw string) string {
+	title := strings.TrimSpace(html.UnescapeString(raw))
+	if title == "" {
+		return ""
+	}
+
+	for _, suffix := range []string{" | PMVHaven", " - PMVHaven"} {
+		if strings.HasSuffix(title, suffix) {
+			title = strings.TrimSpace(strings.TrimSuffix(title, suffix))
+		}
+	}
+	return title
 }

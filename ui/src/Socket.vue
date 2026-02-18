@@ -33,6 +33,8 @@ export default {
     })    
 
     ws.subscribe('service.log', (dataArr, dataObj) => {
+      this.$store.commit('messages/addServiceLog', dataArr.argsDict)
+
       if (dataArr.argsDict.level == 'debug') {
         console.debug(dataArr.argsDict.message)
       }

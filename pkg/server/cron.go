@@ -18,6 +18,7 @@ var previewTask cron.EntryID
 var actorScrapeTask cron.EntryID
 var stashdbScrapeTask cron.EntryID
 var linkScenesTask cron.EntryID
+var pmvMatchTask cron.EntryID
 
 func SetupCron() {
 	cronInstance = cron.New()
@@ -48,6 +49,10 @@ func SetupCron() {
 		log.Println(fmt.Sprintf("Setup Link Scenes Task %v", formatCronSchedule(config.CronSchedule(config.Config.Cron.LinkScenesSchedule))))
 		linkScenesTask, _ = cronInstance.AddFunc(formatCronSchedule(config.CronSchedule(config.Config.Cron.LinkScenesSchedule)), linkScenesCron)
 	}
+	if config.Config.Cron.PmvMatchSchedule.Enabled {
+		log.Println(fmt.Sprintf("Setup PMV Match Task %v", formatCronSchedule(config.CronSchedule(config.Config.Cron.PmvMatchSchedule))))
+		pmvMatchTask, _ = cronInstance.AddFunc(formatCronSchedule(config.CronSchedule(config.Config.Cron.PmvMatchSchedule)), pmvMatchCron)
+	}
 	cronInstance.Start()
 
 	go tasks.CalculateCacheSizes()
@@ -70,6 +75,9 @@ func SetupCron() {
 	if config.Config.Cron.LinkScenesSchedule.RunAtStartDelay > 0 {
 		time.AfterFunc(time.Duration(config.Config.Cron.LinkScenesSchedule.RunAtStartDelay)*time.Minute, linkScenesCron)
 	}
+	if config.Config.Cron.PmvMatchSchedule.RunAtStartDelay > 0 {
+		time.AfterFunc(time.Duration(config.Config.Cron.PmvMatchSchedule.RunAtStartDelay)*time.Minute, pmvMatchCron)
+	}
 
 	log.Println(fmt.Sprintf("Next Rescrape Task at %v", cronInstance.Entry(rescrapTask).Next))
 	log.Println(fmt.Sprintf("Next Rescan Task at %v", cronInstance.Entry(rescanTask).Next))
@@ -77,6 +85,7 @@ func SetupCron() {
 	log.Println(fmt.Sprintf("Next Actor Rescripe Task at %v", cronInstance.Entry(actorScrapeTask).Next))
 	log.Println(fmt.Sprintf("Next Stashdb Rescrape Task at %v", cronInstance.Entry(stashdbScrapeTask).Next))
 	log.Println(fmt.Sprintf("Next Link Scenes Task at %v", cronInstance.Entry(linkScenesTask).Next))
+	log.Println(fmt.Sprintf("Next PMV Match Task at %v", cronInstance.Entry(pmvMatchTask).Next))
 }
 
 func scrapeCron() {
@@ -110,6 +119,16 @@ func linkScenesCron() {
 		tasks.MatchAlternateSources()
 	}
 	log.Println(fmt.Sprintf("Next Link Scenes Task at %v", cronInstance.Entry(rescrapTask).Next))
+}
+
+func pmvMatchCron() {
+	if !session.HasActiveSession() {
+		go tasks.RunPMVMatchUnmatchedTask(tasks.PMVMatchBatchRequest{
+			DryRun: false,
+			Limit:  200,
+		})
+	}
+	log.Println(fmt.Sprintf("Next PMV Match Task at %v", cronInstance.Entry(pmvMatchTask).Next))
 }
 
 var previewGenerateInProgress = false

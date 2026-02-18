@@ -8,19 +8,16 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
-	"github.com/go-resty/resty/v2"
 	"github.com/jinzhu/gorm"
-	"github.com/tidwall/gjson"
-	"github.com/xbapps/xbvr/pkg/common"
 	"github.com/xbapps/xbvr/pkg/models"
 	"github.com/xbapps/xbvr/pkg/scrape"
 )
 
 const (
 	pmvMatchCandidateLimit = 5
-	pmvAutoLinkThreshold   = 0.85
-	defaultOpenAIModel     = "gpt-5"
 )
 
 type PMVMatchCandidate struct {
@@ -29,31 +26,43 @@ type PMVMatchCandidate struct {
 	Title        string  `json:"title"`
 	SceneURL     string  `json:"scene_url"`
 	ThumbnailURL string  `json:"thumbnail_url"`
-	Confidence   float64 `json:"confidence"`
+	Confidence   float64 `json:"-"`
 	Reason       string  `json:"reason"`
 }
 
 type PMVMatchResult struct {
 	Status         string              `json:"status"`
 	FileID         uint                `json:"file_id"`
+	Filename       string              `json:"filename"`
 	Query          string              `json:"query"`
 	Autolinked     bool                `json:"autolinked"`
-	Confidence     float64             `json:"confidence"`
 	MatchedSceneID string              `json:"matched_scene_id,omitempty"`
 	Candidates     []PMVMatchCandidate `json:"candidates"`
 	Message        string              `json:"message,omitempty"`
 }
 
-type openAIPMVRankResult struct {
-	BestIndex      int                      `json:"best_index"`
-	BestConfidence float64                  `json:"best_confidence"`
-	Candidates     []openAIPMVRankCandidate `json:"candidates"`
+type PMVMatchBatchRequest struct {
+	DryRun      bool   `json:"dry_run"`
+	Limit       int    `json:"limit"`
+	Concurrency int    `json:"concurrency,omitempty"`
+	VolumeID    uint   `json:"volume_id,omitempty"`
+	PathPrefix  string `json:"path_prefix,omitempty"`
 }
 
-type openAIPMVRankCandidate struct {
-	Index      int     `json:"index"`
-	Confidence float64 `json:"confidence"`
-	Reason     string  `json:"reason"`
+type PMVMatchBatchItem struct {
+	FileID     uint            `json:"file_id"`
+	Filename   string          `json:"filename"`
+	StatusCode int             `json:"status_code"`
+	Error      string          `json:"error,omitempty"`
+	Result     *PMVMatchResult `json:"result,omitempty"`
+}
+
+type PMVMatchBatchResult struct {
+	Scanned             int                 `json:"scanned"`
+	Matched             int                 `json:"matched"`
+	SkippedAlreadyMatch int                 `json:"skipped_already_matched"`
+	Errors              int                 `json:"errors"`
+	Results             []PMVMatchBatchItem `json:"results"`
 }
 
 func MatchPMVFile(fileID uint, dryRun bool) (*PMVMatchResult, int, error) {
@@ -86,46 +95,76 @@ func MatchPMVFile(fileID uint, dryRun bool) (*PMVMatchResult, int, error) {
 	result := &PMVMatchResult{
 		Status:     "ok",
 		FileID:     fileID,
+		Filename:   file.Filename,
 		Query:      query,
 		Candidates: []PMVMatchCandidate{},
 	}
 
-	candidates, err := scrape.SearchPMVHaven(query, pmvMatchCandidateLimit)
-	if err != nil {
-		tlog.Errorf("search failed query=%q err=%v", query, err)
-		return nil, 424, err
+	searchQueries := buildPMVSearchQueries(file.Filename, query)
+	var candidates []scrape.PMVHavenCandidate
+	var searchErr error
+	usedQuery := query
+	for i, q := range searchQueries {
+		tlog.Infof("search attempt=%d/%d query=%q", i+1, len(searchQueries), q)
+		candidates, searchErr = scrape.SearchPMVHaven(q, pmvMatchCandidateLimit)
+		if searchErr != nil {
+			tlog.Warnf("search failed query=%q err=%v", q, searchErr)
+			continue
+		}
+		if len(candidates) > 0 {
+			usedQuery = q
+			break
+		}
+	}
+	if searchErr != nil && len(candidates) == 0 {
+		return nil, 424, searchErr
 	}
 	if len(candidates) == 0 {
 		tlog.Infof("search returned 0 candidates")
 		result.Message = "no PMVHaven candidates found"
 		return result, 200, nil
 	}
+	result.Query = usedQuery
+	if usedQuery != query {
+		tlog.Infof("fallback query selected used_query=%q base_query=%q", usedQuery, query)
+	}
 	for i, c := range candidates {
 		tlog.Infof("parsed candidate #%d title=%q scene_url=%q thumbnail_url=%q", i+1, c.Title, c.SceneURL, c.ThumbnailURL)
 	}
 
-	ranked := scorePMVCandidatesByText(query, candidates)
-	if len(ranked) > 0 {
-		tlog.Infof("baseline top title=%q pmv_id=%s confidence=%.3f", ranked[0].Title, ranked[0].PMVID, ranked[0].Confidence)
+	thumbCache := map[string]string{}
+	for i := range candidates {
+		cacheKey := candidates[i].SceneURL
+		if cachedThumb, ok := thumbCache[cacheKey]; ok {
+			if strings.TrimSpace(candidates[i].ThumbnailURL) == "" && cachedThumb != "" {
+				candidates[i].ThumbnailURL = cachedThumb
+			}
+			continue
+		}
+
+		prevThumb := strings.TrimSpace(candidates[i].ThumbnailURL)
+		enriched, enrichErr := scrape.EnrichPMVHavenCandidateThumbnail(candidates[i])
+		if enrichErr != nil {
+			tlog.Warnf("candidate #%d scene-page thumbnail enrichment failed scene_url=%q err=%v", i+1, candidates[i].SceneURL, enrichErr)
+			thumbCache[cacheKey] = prevThumb
+			continue
+		}
+
+		thumbCache[cacheKey] = strings.TrimSpace(enriched.ThumbnailURL)
+		candidates[i] = enriched
+
+		source := "search_html"
+		if strings.TrimSpace(enriched.ThumbnailURL) != "" && strings.TrimSpace(enriched.ThumbnailURL) != prevThumb {
+			source = "scene_html"
+		}
+		tlog.Infof("candidate #%d thumbnail source=%s thumbnail_url=%q", i+1, source, enriched.ThumbnailURL)
 	}
 
-	openAIRankMsg := ""
-	if common.EnvConfig.OpenAIAPIKey == "" {
-		openAIRankMsg = "OPENAI_API_KEY missing, used baseline text ranking only"
-		tlog.Infof("openai ranking skipped missing OPENAI_API_KEY")
-	} else {
-		model := openAIPMVModel()
-		tlog.Infof("openai ranking requested model=%s candidates=%d", model, len(ranked))
-		openAIRanks, err := rankPMVCandidatesWithOpenAI(query, ranked)
-		if err != nil {
-			openAIRankMsg = fmt.Sprintf("OpenAI ranking unavailable on model %s (%v), used baseline text ranking only", model, err)
-			tlog.Warnf("openai ranking unavailable model=%s err=%v", model, err)
-		} else {
-			mergeOpenAIRanks(ranked, openAIRanks)
-			openAIRankMsg = fmt.Sprintf("OpenAI ranking applied with model %s", model)
-			tlog.Infof("openai ranking applied model=%s", model)
-		}
+	ranked := scorePMVCandidatesByText(query, candidates)
+	if len(ranked) > 0 {
+		tlog.Infof("baseline top title=%q pmv_id=%s", ranked[0].Title, ranked[0].PMVID)
 	}
+
 	sortCandidates(ranked)
 
 	for i := range ranked {
@@ -133,26 +172,13 @@ func MatchPMVFile(fileID uint, dryRun bool) (*PMVMatchResult, int, error) {
 	}
 	result.Candidates = ranked
 	if len(ranked) > 0 {
-		result.Confidence = ranked[0].Confidence
-		result.MatchedSceneID = "pmvhaven-" + ranked[0].PMVID
-		tlog.Infof("final top parsed title=%q pmv_id=%s confidence=%.3f thumbnail=%q", ranked[0].Title, ranked[0].PMVID, ranked[0].Confidence, ranked[0].ThumbnailURL)
-	}
-
-	if len(ranked) == 0 || ranked[0].Confidence < pmvAutoLinkThreshold {
-		result.Message = fmt.Sprintf("best confidence %.2f is below autolink threshold %.2f", result.Confidence, pmvAutoLinkThreshold)
-		if openAIRankMsg != "" {
-			result.Message = result.Message + "; " + openAIRankMsg
-		}
-		tlog.Infof("not autolinked best_confidence=%.3f threshold=%.2f", result.Confidence, pmvAutoLinkThreshold)
-		return result, 200, nil
+		result.MatchedSceneID = buildPMVCustomSceneID(fileID)
+		tlog.Infof("final top parsed title=%q pmv_id=%s thumbnail=%q", ranked[0].Title, ranked[0].PMVID, ranked[0].ThumbnailURL)
 	}
 
 	if dryRun {
 		result.Message = "dry run: best candidate found, no database changes applied"
-		if openAIRankMsg != "" {
-			result.Message = result.Message + "; " + openAIRankMsg
-		}
-		tlog.Infof("dry run success candidate_title=%q pmv_id=%s confidence=%.3f", ranked[0].Title, ranked[0].PMVID, ranked[0].Confidence)
+		tlog.Infof("dry run success candidate_title=%q pmv_id=%s", ranked[0].Title, ranked[0].PMVID)
 		return result, 200, nil
 	}
 
@@ -164,18 +190,18 @@ func MatchPMVFile(fileID uint, dryRun bool) (*PMVMatchResult, int, error) {
 
 	result.Autolinked = true
 	result.MatchedSceneID = matchedSceneID
-	result.Message = "file linked to PMVHaven scene"
-	if openAIRankMsg != "" {
-		result.Message = result.Message + "; " + openAIRankMsg
-	}
-	tlog.Infof("autolinked scene_id=%s candidate_title=%q confidence=%.3f", matchedSceneID, ranked[0].Title, ranked[0].Confidence)
+	result.Message = "file linked to custom PMV scene"
+	tlog.Infof("autolinked scene_id=%s candidate_title=%q", matchedSceneID, ranked[0].Title)
 	return result, 200, nil
 }
 
 func normalizePMVQuery(filename string) string {
 	name := strings.TrimSpace(filename)
 	name = strings.TrimSuffix(name, filepath.Ext(name))
+	name = regexp.MustCompile(`([a-z])([A-Z])`).ReplaceAllString(name, "$1 $2")
 	name = strings.ToLower(name)
+	// Common downloader/exporter suffixes: "..._<epoch_ms>_<randomid>".
+	name = regexp.MustCompile(`[_\-\s]\d{10,}[_\-\s][a-z0-9]{6,}$`).ReplaceAllString(name, "")
 
 	// Common PMV filename format: channel_-_title.
 	if idx := strings.Index(name, "_-_"); idx >= 0 {
@@ -202,7 +228,7 @@ func normalizePMVQuery(filename string) string {
 	name = strings.ReplaceAll(name, "-", " ")
 	name = strings.ReplaceAll(name, "(", " ")
 	name = strings.ReplaceAll(name, ")", " ")
-	name = regexp.MustCompile(`[^a-z0-9\s]+`).ReplaceAllString(name, " ")
+	name = regexp.MustCompile(`[^a-z0-9\s']+`).ReplaceAllString(name, " ")
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return ""
@@ -210,10 +236,12 @@ func normalizePMVQuery(filename string) string {
 
 	skipTokens := map[string]bool{
 		"1080p": true, "1440p": true, "2160p": true, "4k": true, "5k": true, "6k": true, "8k": true,
-		"fps": true, "60fps": true, "30fps": true,
+		"fps": true, "60fps": true, "30fps": true, "4k60": true,
 		"sbs": true, "tb": true, "lr": true, "vr": true,
 		"mp4": true, "mkv": true, "avi": true, "mov": true, "wmv": true,
 		"uhd": true, "hd": true, "fullhd": true, "hq": true,
+		"h264": true, "h265": true, "x264": true, "x265": true, "264": true, "265": true,
+		"2880p": true, "4320p": true, "upscale": true,
 	}
 
 	out := make([]string, 0)
@@ -230,6 +258,78 @@ func normalizePMVQuery(filename string) string {
 		return strings.Join(strings.Fields(name), " ")
 	}
 	return strings.Join(out, " ")
+}
+
+func buildPMVSearchQueries(filename, baseQuery string) []string {
+	added := map[string]bool{}
+	out := make([]string, 0, 8)
+	add := func(q string) {
+		q = strings.TrimSpace(strings.Join(strings.Fields(q), " "))
+		if q == "" || added[q] {
+			return
+		}
+		added[q] = true
+		out = append(out, q)
+	}
+
+	add(baseQuery)
+	baseTokens := strings.Fields(baseQuery)
+	if len(baseTokens) >= 2 {
+		add(strings.Join(baseTokens[1:], " "))
+	}
+	if len(baseTokens) >= 3 {
+		add(strings.Join(baseTokens[:len(baseTokens)-1], " "))
+	}
+	if len(baseTokens) >= 4 {
+		add(strings.Join(baseTokens[1:len(baseTokens)-1], " "))
+	}
+
+	cleaned := stripPMVSearchNoise(baseTokens)
+	if len(cleaned) > 0 {
+		add(strings.Join(cleaned, " "))
+		if len(cleaned) >= 2 {
+			add(strings.Join(cleaned[1:], " "))
+		}
+	}
+
+	raw := strings.TrimSpace(strings.TrimSuffix(filename, filepath.Ext(filename)))
+	if raw != "" {
+		for _, sep := range []string{"_-_", " - ", " – ", " — "} {
+			if strings.Contains(raw, sep) {
+				parts := strings.Split(raw, sep)
+				if len(parts) >= 2 {
+					add(normalizePMVQuery(strings.Join(parts[1:], " ")))
+				}
+				if len(parts) >= 3 {
+					add(normalizePMVQuery(strings.Join(parts[2:], " ")))
+				}
+			}
+		}
+	}
+
+	return out
+}
+
+func stripPMVSearchNoise(tokens []string) []string {
+	if len(tokens) == 0 {
+		return nil
+	}
+	skip := map[string]bool{
+		"1080p": true, "1440p": true, "2160p": true, "2880p": true, "4320p": true, "4k": true, "8k": true,
+		"60fps": true, "30fps": true, "fps": true,
+		"h264": true, "h265": true, "x264": true, "x265": true, "264": true, "265": true,
+		"sbs": true, "tb": true, "lr": true, "vr": true,
+		"upscale": true, "remaster": true,
+	}
+	out := make([]string, 0, len(tokens))
+	for _, tok := range tokens {
+		tok = strings.TrimSpace(strings.ToLower(tok))
+		if tok == "" || skip[tok] {
+			continue
+		}
+		out = append(out, tok)
+	}
+	return out
 }
 
 func isLikelyNoiseToken(tok string) bool {
@@ -306,123 +406,97 @@ func scorePMVCandidatesByText(query string, candidates []scrape.PMVHavenCandidat
 	return out
 }
 
-func rankPMVCandidatesWithOpenAI(query string, candidates []PMVMatchCandidate) ([]openAIPMVRankCandidate, error) {
-	type openAIMessage struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
-	}
-	type openAIRequest struct {
-		Model       string          `json:"model"`
-		Temperature float64         `json:"temperature"`
-		Messages    []openAIMessage `json:"messages"`
-	}
-
-	prompt := strings.Builder{}
-	prompt.WriteString("Match the best PMV candidate for this local filename query.\n")
-	prompt.WriteString("Return JSON only with this schema:\n")
-	prompt.WriteString(`{"best_index":1,"best_confidence":0.0,"candidates":[{"index":1,"confidence":0.0,"reason":"short reason"}]}` + "\n")
-	prompt.WriteString("Confidence must be between 0.0 and 1.0.\n")
-	prompt.WriteString(fmt.Sprintf("Query: %q\n", query))
-	prompt.WriteString("Candidates:\n")
-	for i, c := range candidates {
-		prompt.WriteString(fmt.Sprintf("%d) title=%q scene_url=%q thumbnail_url=%q\n", i+1, c.Title, c.SceneURL, c.ThumbnailURL))
-	}
-
-	reqBody := openAIRequest{
-		Model:       openAIPMVModel(),
-		Temperature: 0,
-		Messages: []openAIMessage{
-			{
-				Role:    "system",
-				Content: "You are a strict JSON responder for filename-to-title matching.",
-			},
-			{
-				Role:    "user",
-				Content: prompt.String(),
-			},
-		},
-	}
-
-	resp, err := resty.New().R().
-		SetHeader("Authorization", "Bearer "+common.EnvConfig.OpenAIAPIKey).
-		SetHeader("Content-Type", "application/json").
-		SetBody(reqBody).
-		Post("https://api.openai.com/v1/chat/completions")
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode() < 200 || resp.StatusCode() >= 300 {
-		msg := strings.TrimSpace(gjson.Get(resp.String(), "error.message").String())
-		if msg != "" {
-			return nil, fmt.Errorf("openai request failed with status %d (%s)", resp.StatusCode(), msg)
+func inferPMVStudio(filename, candidateTitle string) string {
+	for _, sep := range []string{" - ", " – ", " — ", "|"} {
+		if idx := strings.Index(candidateTitle, sep); idx > 0 {
+			prefix := cleanStudioToken(candidateTitle[:idx])
+			if prefix != "" {
+				return prefix
+			}
 		}
-		return nil, fmt.Errorf("openai request failed with status %d", resp.StatusCode())
 	}
 
-	content := gjson.Get(resp.String(), "choices.0.message.content").String()
-	if strings.TrimSpace(content) == "" {
-		return nil, errors.New("openai returned empty response")
-	}
-	jsonContent := extractJSONObject(content)
-	if jsonContent == "" {
-		return nil, errors.New("openai response did not contain JSON")
+	raw := strings.TrimSpace(strings.TrimSuffix(filename, filepath.Ext(filename)))
+	if raw == "" {
+		return ""
 	}
 
-	var parsed openAIPMVRankResult
-	if err := json.Unmarshal([]byte(jsonContent), &parsed); err != nil {
-		return nil, err
+	if strings.Contains(raw, "_-_") {
+		parts := strings.Split(raw, "_-_")
+		for i := 0; i < len(parts) && i < 3; i++ {
+			p := cleanStudioToken(parts[i])
+			if p == "" {
+				continue
+			}
+			if strings.Contains(strings.ToLower(p), "pmv") {
+				return p
+			}
+			if i == 0 {
+				return p
+			}
+		}
 	}
-	return parsed.Candidates, nil
+
+	for _, sep := range []string{" - ", " – ", " — "} {
+		if idx := strings.Index(raw, sep); idx > 0 {
+			prefix := cleanStudioToken(raw[:idx])
+			if prefix != "" {
+				return prefix
+			}
+		}
+	}
+
+	return cleanStudioToken(raw)
 }
 
-func openAIPMVModel() string {
-	model := strings.TrimSpace(common.EnvConfig.OpenAIPMVModel)
-	if model == "" {
-		return defaultOpenAIModel
+func cleanStudioToken(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.Trim(s, "[](){}-_.,:; ")
+	s = strings.ReplaceAll(s, "_", " ")
+	s = strings.ReplaceAll(s, ".", " ")
+	s = strings.Join(strings.Fields(s), " ")
+	if s == "" {
+		return ""
 	}
-	return model
-}
-
-func mergeOpenAIRanks(candidates []PMVMatchCandidate, openAIRanks []openAIPMVRankCandidate) {
-	if len(candidates) == 0 || len(openAIRanks) == 0 {
-		return
+	if len(s) > 64 {
+		return ""
 	}
-	for _, rank := range openAIRanks {
-		idx := rank.Index - 1
-		if idx < 0 || idx >= len(candidates) {
-			continue
-		}
-		conf := clampScore(rank.Confidence)
-		if conf == 0 {
-			continue
-		}
-		candidates[idx].Confidence = conf
-		if strings.TrimSpace(rank.Reason) != "" {
-			candidates[idx].Reason = strings.TrimSpace(rank.Reason)
+	hasLetter := false
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+			hasLetter = true
+			break
 		}
 	}
+	if !hasLetter {
+		return ""
+	}
+	return s
 }
 
 func applyPMVMatch(db *gorm.DB, file *models.File, candidate PMVMatchCandidate) (string, error) {
-	sceneSuffix := strings.TrimSpace(candidate.PMVID)
-	if sceneSuffix == "" {
-		sceneSuffix = regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(strings.ToLower(candidate.Title), "-")
-		sceneSuffix = strings.Trim(sceneSuffix, "-")
-		if sceneSuffix == "" {
-			sceneSuffix = "matched"
-		}
+	sceneID := buildPMVCustomSceneID(file.ID)
+	studio := inferPMVStudio(file.Filename, candidate.Title)
+	if studio == "" {
+		studio = "Custom"
 	}
-	sceneID := "pmvhaven-" + sceneSuffix
+	now := time.Now()
+	sceneWasCreated := false
+	var existing models.Scene
+	if err := db.Where(&models.Scene{SceneID: sceneID}).First(&existing).Error; err == gorm.ErrRecordNotFound {
+		sceneWasCreated = true
+	}
 
 	ext := models.ScrapedScene{
 		SceneID:     sceneID,
-		ScraperID:   "pmvhaven",
+		ScraperID:   "custom",
 		SceneType:   "VR",
 		Title:       strings.TrimSpace(candidate.Title),
-		Studio:      "PMVHaven",
-		Site:        "PMVHaven",
+		Studio:      studio,
+		Site:        "CustomVR",
 		HomepageURL: strings.TrimSpace(candidate.SceneURL),
 		MembersUrl:  strings.TrimSpace(candidate.SceneURL),
+		Released:    now.Format("2006-01-02"),
 		Filenames:   []string{file.Filename},
 	}
 	if strings.TrimSpace(candidate.ThumbnailURL) != "" {
@@ -436,6 +510,16 @@ func applyPMVMatch(db *gorm.DB, file *models.File, candidate PMVMatchCandidate) 
 	var scene models.Scene
 	if err := scene.GetIfExist(sceneID); err != nil {
 		return "", err
+	}
+	if sceneWasCreated {
+		if err := db.Model(&scene).Updates(map[string]interface{}{
+			"created_at": now,
+			"added_date": now,
+		}).Error; err != nil {
+			return "", err
+		}
+		scene.CreatedAt = now
+		scene.AddedDate = now
 	}
 
 	file.SceneID = scene.ID
@@ -511,22 +595,157 @@ func sortCandidates(c []PMVMatchCandidate) {
 	})
 }
 
-func extractJSONObject(text string) string {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return ""
+func MatchPMVUnmatchedFiles(req PMVMatchBatchRequest) (*PMVMatchBatchResult, int, error) {
+	limit := normalizePMVBatchLimit(req.Limit)
+	concurrency := normalizePMVBatchConcurrency(req.Concurrency)
+
+	db, _ := models.GetDB()
+	defer db.Close()
+
+	query := db.Model(&models.File{}).Where("type = ? AND scene_id = 0", "video")
+	if req.VolumeID != 0 {
+		query = query.Where("volume_id = ?", req.VolumeID)
+	}
+	if strings.TrimSpace(req.PathPrefix) != "" {
+		query = query.Where("path LIKE ?", strings.TrimSpace(req.PathPrefix)+"%")
 	}
 
-	// Strip markdown fences if present.
-	text = strings.TrimPrefix(text, "```json")
-	text = strings.TrimPrefix(text, "```")
-	text = strings.TrimSuffix(text, "```")
-	text = strings.TrimSpace(text)
-
-	start := strings.Index(text, "{")
-	end := strings.LastIndex(text, "}")
-	if start == -1 || end == -1 || end <= start {
-		return ""
+	var files []models.File
+	if err := query.Order("created_time desc").Limit(limit).Find(&files).Error; err != nil {
+		return nil, 500, err
 	}
-	return strings.TrimSpace(text[start : end+1])
+
+	out := &PMVMatchBatchResult{
+		Scanned: len(files),
+		Results: make([]PMVMatchBatchItem, len(files)),
+	}
+
+	if len(files) == 0 {
+		return out, 200, nil
+	}
+
+	if concurrency > len(files) {
+		concurrency = len(files)
+	}
+
+	type batchJob struct {
+		Index int
+		File  models.File
+	}
+	type batchResult struct {
+		Index int
+		Item  PMVMatchBatchItem
+	}
+
+	jobs := make(chan batchJob)
+	results := make(chan batchResult, len(files))
+
+	var wg sync.WaitGroup
+	worker := func() {
+		defer wg.Done()
+		for job := range jobs {
+			item := PMVMatchBatchItem{
+				FileID:   job.File.ID,
+				Filename: job.File.Filename,
+			}
+
+			result, statusCode, err := MatchPMVFile(job.File.ID, req.DryRun)
+			if statusCode == 0 {
+				statusCode = 500
+			}
+			item.StatusCode = statusCode
+			if err != nil {
+				item.Error = err.Error()
+				results <- batchResult{Index: job.Index, Item: item}
+				continue
+			}
+
+			item.Result = result
+			results <- batchResult{Index: job.Index, Item: item}
+		}
+	}
+
+	wg.Add(concurrency)
+	for i := 0; i < concurrency; i++ {
+		go worker()
+	}
+
+	go func() {
+		for i, file := range files {
+			jobs <- batchJob{Index: i, File: file}
+		}
+		close(jobs)
+		wg.Wait()
+		close(results)
+	}()
+
+	for r := range results {
+		out.Results[r.Index] = r.Item
+	}
+
+	for _, item := range out.Results {
+		if item.Error != "" {
+			if item.StatusCode == 409 {
+				out.SkippedAlreadyMatch++
+			} else {
+				out.Errors++
+			}
+			continue
+		}
+		if item.Result == nil {
+			out.Errors++
+			continue
+		}
+		if item.Result.Autolinked {
+			out.Matched++
+		}
+	}
+
+	return out, 200, nil
+}
+
+func RunPMVMatchUnmatchedTask(req PMVMatchBatchRequest) {
+	tlog := log.WithField("task", "pmv-match-unmatched")
+	if models.CheckLock("pmv-match") {
+		tlog.Infof("skipped: task already running")
+		return
+	}
+
+	models.CreateLock("pmv-match")
+	defer models.RemoveLock("pmv-match")
+
+	tlog.Infof("start dry_run=%v limit=%d concurrency=%d volume_id=%d path_prefix=%q",
+		req.DryRun, req.Limit, normalizePMVBatchConcurrency(req.Concurrency), req.VolumeID, req.PathPrefix)
+	result, statusCode, err := MatchPMVUnmatchedFiles(req)
+	if err != nil {
+		tlog.Errorf("failed status=%d err=%v", statusCode, err)
+		return
+	}
+
+	tlog.Infof("done status=%d scanned=%d matched=%d skipped_already_matched=%d errors=%d",
+		statusCode, result.Scanned, result.Matched, result.SkippedAlreadyMatch, result.Errors)
+}
+
+func normalizePMVBatchLimit(limit int) int {
+	if limit <= 0 {
+		return 50
+	}
+	if limit > 500 {
+		return 500
+	}
+	return limit
+}
+
+func normalizePMVBatchConcurrency(concurrency int) int {
+	if concurrency <= 0 {
+		return 10
+	}
+	if concurrency > 50 {
+		return 50
+	}
+	return concurrency
+}
+
+func buildPMVCustomSceneID(fileID uint) string {
+	return fmt.Sprintf("custom-pmv-%d", fileID)
 }

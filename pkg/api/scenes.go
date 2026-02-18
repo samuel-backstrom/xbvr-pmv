@@ -77,6 +77,7 @@ type ResponseGetFilters struct {
 	Cast          []string        `json:"cast"`
 	Tags          []string        `json:"tags"`
 	Sites         []string        `json:"sites"`
+	Studios       []string        `json:"studios"`
 	ReleaseMonths []string        `json:"release_month"`
 	Volumes       []models.Volume `json:"volumes"`
 	Attributes    []string        `json:"attributes"`
@@ -280,6 +281,15 @@ func (i SceneResource) getFilters(req *restful.Request, resp *restful.Response) 
 		}
 	}
 
+	// Available studios
+	tx.Group("studio").Find(&scenes)
+	var outStudios []string
+	for i := range scenes {
+		if scenes[i].Studio != "" {
+			outStudios = append(outStudios, scenes[i].Studio)
+		}
+	}
+
 	// Available tags
 	tx.Joins("left join scene_tags on scene_tags.scene_id=scenes.id").
 		Joins("left join tags on tags.id=scene_tags.tag_id").
@@ -453,6 +463,7 @@ func (i SceneResource) getFilters(req *restful.Request, resp *restful.Response) 
 		Tags:          outTags,
 		Cast:          outCast,
 		Sites:         outSites,
+		Studios:       outStudios,
 		ReleaseMonths: outRelease,
 		Volumes:       outVolumes,
 		Attributes:    outAttributes,

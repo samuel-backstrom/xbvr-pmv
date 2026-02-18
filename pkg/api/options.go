@@ -186,6 +186,14 @@ type RequestSaveOptionsTaskSchedule struct {
 	LinkScenesHourStart    int  `json:"linkScenesHourStart"`
 	LinkScenesHourEnd      int  `json:"linkScenesHourEnd"`
 	LinkScenesStartDelay   int  `json:"linkScenesStartDelay"`
+
+	PmvMatchEnabled      bool `json:"pmvMatchEnabled"`
+	PmvMatchHourInterval int  `json:"pmvMatchHourInterval"`
+	PmvMatchUseRange     bool `json:"pmvMatchUseRange"`
+	PmvMatchMinuteStart  int  `json:"pmvMatchMinuteStart"`
+	PmvMatchHourStart    int  `json:"pmvMatchHourStart"`
+	PmvMatchHourEnd      int  `json:"pmvMatchHourEnd"`
+	PmvMatchStartDelay   int  `json:"pmvMatchStartDelay"`
 }
 type RequestSaveSiteMatchParams struct {
 	SiteId      string                   `json:"site"`
@@ -1024,6 +1032,14 @@ func (i ConfigResource) saveOptionsTaskSchedule(req *restful.Request, resp *rest
 	config.Config.Cron.LinkScenesSchedule.HourStart = r.LinkScenesHourStart
 	config.Config.Cron.LinkScenesSchedule.HourEnd = r.LinkScenesHourEnd
 	config.Config.Cron.LinkScenesSchedule.RunAtStartDelay = r.LinkScenesStartDelay
+
+	config.Config.Cron.PmvMatchSchedule.Enabled = r.PmvMatchEnabled
+	config.Config.Cron.PmvMatchSchedule.HourInterval = r.PmvMatchHourInterval
+	config.Config.Cron.PmvMatchSchedule.UseRange = r.PmvMatchUseRange
+	config.Config.Cron.PmvMatchSchedule.MinuteStart = r.PmvMatchMinuteStart
+	config.Config.Cron.PmvMatchSchedule.HourStart = r.PmvMatchHourStart
+	config.Config.Cron.PmvMatchSchedule.HourEnd = r.PmvMatchHourEnd
+	config.Config.Cron.PmvMatchSchedule.RunAtStartDelay = r.PmvMatchStartDelay
 
 	config.SaveConfig()
 

@@ -90,3 +90,75 @@ func TestParsePMVHavenSearchHTML_NuxtVideoLinks(t *testing.T) {
 		t.Fatalf("unexpected title %q", candidates[0].Title)
 	}
 }
+
+func TestParsePMVHavenSceneHTMLForThumbnail_Meta(t *testing.T) {
+	html := `
+	<html><head>
+	  <meta property="og:image" content="/images/cover.jpg" />
+	  <meta name="twitter:image" content="/images/twitter.jpg" />
+	</head><body></body></html>`
+
+	got := ParsePMVHavenSceneHTMLForThumbnail(html)
+	want := "https://pmvhaven.com/images/cover.jpg"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestParsePMVHavenSceneHTMLForThumbnail_JSONLD(t *testing.T) {
+	html := `
+	<html><body>
+	  <script type="application/ld+json">
+	  {
+	    "@context": "https://schema.org",
+	    "@type": "VideoObject",
+	    "thumbnailUrl": "https://cdn.pmvhaven.com/thumbs/scene.jpg"
+	  }
+	  </script>
+	</body></html>`
+
+	got := ParsePMVHavenSceneHTMLForThumbnail(html)
+	want := "https://cdn.pmvhaven.com/thumbs/scene.jpg"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestParsePMVHavenSceneHTMLForThumbnail_VideoPoster(t *testing.T) {
+	html := `
+	<html><body>
+	  <video poster="//video.pmvhaven.com/poster.webp"></video>
+	</body></html>`
+
+	got := ParsePMVHavenSceneHTMLForThumbnail(html)
+	want := "https://video.pmvhaven.com/poster.webp"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestParsePMVHavenSceneHTMLForTitle_Meta(t *testing.T) {
+	html := `
+	<html><head>
+	  <meta property="og:title" content="THROAT GOAT BLOWJOB PMV | PMVHaven" />
+	</head><body></body></html>`
+
+	got := ParsePMVHavenSceneHTMLForTitle(html)
+	want := "THROAT GOAT BLOWJOB PMV"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestParsePMVHavenSceneHTMLForTitle_TitleTagFallback(t *testing.T) {
+	html := `
+	<html><head>
+	  <title>HEAVEN | PMV [Arckom] - PMVHaven</title>
+	</head><body></body></html>`
+
+	got := ParsePMVHavenSceneHTMLForTitle(html)
+	want := "HEAVEN | PMV [Arckom]"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}

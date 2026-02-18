@@ -157,7 +157,7 @@ func RenderHeatmap(inputFile string, destFile string, width, height, numSegments
 
 	outpng, err := os.Create(destFile)
 	if err != nil {
-		return fmt.Errorf("Error storing png: " + err.Error())
+		return fmt.Errorf("error storing png: %w", err)
 	}
 	defer outpng.Close()
 

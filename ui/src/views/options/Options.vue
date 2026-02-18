@@ -7,6 +7,7 @@
           <b-menu-list :label="$t('Options')">
             <b-menu-item :label="$t('Storage')" :active="active==='storage'" @click="setActive('storage')"/>
             <b-menu-item :label="$t('Previews')" :active="active==='previews'" @click="setActive('previews')"/>
+            <b-menu-item :label="$t('PMV Matching')" :active="active==='pmv-matching'" @click="setActive('pmv-matching')"/>
             <!--            <b-menu-item :label="$t('Scheduled tasks')" :active="active==='tasks'" @click="setActive ('tasks')"/>-->
             <b-menu-item :label="$t('Cache')" :active="active==='cache'" @click="setActive('cache')"></b-menu-item>
             <b-menu-item :label="$t('Task Schedules')" :active="active==='schedules'" @click="setActive('schedules')"></b-menu-item>
@@ -26,6 +27,7 @@
             <b-menu-item :label="$t('DLNA')" :active="active==='interface_dlna'" @click="setActive('interface_dlna')"/>
             <b-menu-item :label="$t('Web UI')" :active="active==='interface_web'" @click="setActive('interface_web')"/>
             <b-menu-item :label="$t('Advanced')" :active="active==='interface_advanced'" @click="setActive('interface_advanced')"/>
+            <b-menu-item label="Logging" :active="active==='interface_logging'" @click="setActive('interface_logging')"/>
           </b-menu-list>
         </b-menu>
       </div>
@@ -35,6 +37,7 @@
           <Storage v-show="active==='storage'"/>
           <Cache v-show="active==='cache'"/>
           <Previews v-show="active==='previews'"/>
+          <PMVMatching v-show="active==='pmv-matching'"/>
           <Schedules v-show="active==='schedules'"/>
           <SceneDataScrapers v-show="active==='data-scrapers'"/>
           <SceneCreate v-show="active==='create-scene'"/>
@@ -44,6 +47,7 @@
           <InterfaceDLNA v-show="active==='interface_dlna'"/>
           <InterfaceDeoVR v-show="active==='interface_deovr'"/>
           <InterfaceAdvanced v-show="active==='interface_advanced'"/>
+          <Logging v-show="active==='interface_logging'"/>
           <SceneMatchParams v-if="showMatchParamsOverlay"/>
         </div>
       </div>
@@ -62,13 +66,15 @@ import SceneDataImportExport from './sections/OptionsSceneDataImportExport'
 import InterfaceDLNA from './sections/InterfaceDLNA.vue'
 import Cache from './sections/Cache.vue'
 import Previews from './sections/Previews.vue'
+import PMVMatching from './sections/PMVMatching.vue'
 import Schedules from './sections/Schedules.vue'
 import InterfaceDeoVR from './sections/InterfaceDeoVR.vue'
 import InterfaceAdvanced from './sections/InterfaceAdvanced.vue'
+import Logging from './sections/Logging.vue'
 import SceneMatchParams from './overlays/SceneMatchParams.vue'
 
 export default {
-  components: { Storage, SceneDataScrapers, SceneCreate, Funscripts, SceneDataImportExport, InterfaceWeb, InterfaceDLNA, InterfaceDeoVR, Cache, Previews, Schedules, InterfaceAdvanced,SceneMatchParams },
+  components: { Storage, SceneDataScrapers, SceneCreate, Funscripts, SceneDataImportExport, InterfaceWeb, InterfaceDLNA, InterfaceDeoVR, Cache, Previews, PMVMatching, Schedules, InterfaceAdvanced, Logging, SceneMatchParams },
   data: function () {
     return {
       active: 'storage'

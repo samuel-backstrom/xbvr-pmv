@@ -24,7 +24,7 @@ func ScrapeJavLibrary(out *[]models.ScrapedScene, queryString string) {
 			if len(match) > 1 {
 				// Found a search results page
 				searchQuery := strings.ToLower(match[1])
-				log.Printf("Search results page found for " + searchQuery)
+				log.Printf("Search results page found for %s", searchQuery)
 
 				// Try to find exact match in the results
 				videos := e.DOM.Find("div.videos div.video a")

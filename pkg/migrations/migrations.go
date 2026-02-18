@@ -2392,7 +2392,7 @@ func Migrate(migrateTo string) {
 			Migrate: func(tx *gorm.DB) error {
 				// Update status before running migration
 				msg := fmt.Sprintf("Running migration %s", migrations[currentIndex].ID)
-				tlog.Infof(msg)
+				tlog.Info(msg)
 				config.UpdateMigrationStatus(migrations[currentIndex].ID, currentIndex+1, totalMigrations, msg)
 
 				// Run the actual migration

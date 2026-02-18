@@ -5,6 +5,7 @@ import Options from './views/options/Options'
 import Scenes from './views/scenes/Scenes'
 import Actors  from './views/actors/Actors'
 import Files from './views/files/Files'
+import Logs from './views/logs/Logs'
 
 Vue.use(Router)
 
@@ -31,6 +32,11 @@ export default new Router({
       path: '/options',
       name: 'options',
       component: Options
+    },
+    {
+      path: '/logs',
+      name: 'logs',
+      component: Logs
     }
   ]
 })

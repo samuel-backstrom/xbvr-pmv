@@ -149,6 +149,24 @@
         </b-taginput>
       </b-field>
 
+      <b-field label="Studio" label-position="on-border" class="field-extra">
+        <b-taginput v-model="studios" autocomplete :data="filteredStudios" @typing="getFilteredStudios">
+          <template slot-scope="props">{{ props.option }}</template>
+          <template slot="empty">No matching studios</template>
+          <template #selected="props">
+            <b-tag v-for="(tag, index) in props.tags"
+              :type="tag.charAt(0)=='!' ? 'is-danger': (tag.charAt(0)=='&' ? 'is-success' : '')"
+              :key="tag+index" :tabstop="false" closable  @close="studios=studios.filter(e => e !== tag)" @click="toggle2Way(tag,index,'studios')">
+                <b-tooltip position="is-right" :delay="200"
+                  :label="tag.charAt(0)=='!' ? 'Exclude ' + removeConditionPrefix(tag) : 'Include ' + removeConditionPrefix(tag)">
+                  <b-icon pack="mdi" v-if="tag.charAt(0)=='!'" icon="minus-circle-outline" size="is-small" class="tagicon"></b-icon>
+                  {{removeConditionPrefix(tag)}}
+                </b-tooltip>
+            </b-tag>
+          </template>
+        </b-taginput>
+      </b-field>
+
       <b-field label="Tags" label-position="on-border" class="field-extra">
         <b-taginput v-model="tags" autocomplete :data="filteredTags" @typing="getFilteredTags">
           <template slot-scope="props">{{ props.option }}</template>
@@ -306,6 +324,7 @@ export default {
     return {
       filteredCast: [],
       filteredSites: [],
+      filteredStudios: [],
       filteredTags: [],
       filteredCuepoints: [],
       filteredAttributes: [],
@@ -333,6 +352,12 @@ export default {
       this.filteredSites = this.filters.sites.filter(option => (
         option.toString().toLowerCase().indexOf(text.toLowerCase()) >= 0 &&
         !this.sites.some(entry => this.removeConditionPrefix(entry.toString()) === option.toString())
+      ))
+    },
+    getFilteredStudios (text) {
+      this.filteredStudios = this.filters.studios.filter(option => (
+        option.toString().toLowerCase().indexOf(text.toLowerCase()) >= 0 &&
+        !this.studios.some(entry => this.removeConditionPrefix(entry.toString()) === option.toString())
       ))
     },
     getFilteredTags (text) {
@@ -556,6 +581,9 @@ export default {
       switch (list) {
         case 'sites':
           tags=this.sites
+          break
+        case 'studios':
+          tags=this.studios
       }      
       switch(tags[idx].charAt(0)) {
         case '!':
@@ -567,6 +595,9 @@ export default {
       switch (list) {
         case 'sites':
           this.sites=tags
+          break
+        case 'studios':
+          this.studios=tags
           break
       }      
     },    
@@ -629,6 +660,15 @@ export default {
       },
       set (value) {
         this.$store.state.sceneList.filters.sites = value
+        this.reloadList()
+      }
+    },
+    studios: {
+      get () {
+        return this.$store.state.sceneList.filters.studios
+      },
+      set (value) {
+        this.$store.state.sceneList.filters.studios = value
         this.reloadList()
       }
     },

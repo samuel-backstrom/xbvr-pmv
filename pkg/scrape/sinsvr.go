@@ -107,11 +107,13 @@ func SinsVR(wg *models.ScrapeWG, updateSite bool, knownScenes []string, out chan
 				profileUrl := `https://xsinsvr.com/model/` + strings.ToLower(strings.ReplaceAll(name, " ", "-"))
 				profileUrlResp, err := http.Head(profileUrl)
 				if err != nil {
-					log.Errorf("Method Head Failed on profileUrlResp %s with error %s", profileUrlResp, err)
+					log.Errorf("Method Head failed on profile URL %s with error %v", profileUrl, err)
 				} else if profileUrlResp.StatusCode == 200 { //The url is not valid don't bother adding it to the ActorDetails
 					sc.ActorDetails[name] = models.ActorDetails{Source: sc.ScraperID + " scrape", ProfileUrl: profileUrl}
 				}
-				defer profileUrlResp.Body.Close()
+				if profileUrlResp != nil && profileUrlResp.Body != nil {
+					defer profileUrlResp.Body.Close()
+				}
 			}
 		}
 

@@ -664,6 +664,7 @@ type RequestSceneList struct {
 	IsWatched    optional.Bool     `json:"isWatched"`
 	Lists        []optional.String `json:"lists"`
 	Sites        []optional.String `json:"sites"`
+	Studios      []optional.String `json:"studios"`
 	Tags         []optional.String `json:"tags"`
 	Cast         []optional.String `json:"cast"`
 	Cuepoint     []optional.String `json:"cuepoint"`
@@ -1019,6 +1020,25 @@ func queryScenes(db *gorm.DB, r RequestSceneList) (*gorm.DB, *gorm.DB) {
 	}
 	for _, exclude := range excludedSites {
 		tx = tx.Where("site NOT IN (?)", exclude)
+	}
+
+	var studios []string
+	var excludedStudios []string
+	for _, i := range r.Studios {
+		switch firstchar := string(i.OrElse(" ")[0]); firstchar {
+		case "!":
+			exStudio, _ := i.Get()
+			excludedStudios = append(excludedStudios, exStudio[1:])
+		default:
+			studios = append(studios, i.OrElse(""))
+		}
+	}
+
+	if len(studios) > 0 {
+		tx = tx.Where("studio IN (?)", studios)
+	}
+	for _, exclude := range excludedStudios {
+		tx = tx.Where("studio NOT IN (?)", exclude)
 	}
 
 	var tags []string

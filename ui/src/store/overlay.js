@@ -36,6 +36,9 @@ const state = {
     displaySelectedScene: true,    
     selectedScene: null,        // selected scene 
   },
+  liveLogs: {
+    show: false
+  },
   sceneMatchParams:{ // overlay to edit matching params
     show:false,
     site: '',
@@ -136,6 +139,12 @@ const mutations = {
   },
   hideQuickFind (state, payload) {
     state.quickFind.show = false
+  },
+  showLiveLogs (state) {
+    state.liveLogs.show = true
+  },
+  hideLiveLogs (state) {
+    state.liveLogs.show = false
   },
   showSceneMatchParams (state, payload) {
     state.sceneMatchParams.site = payload.site

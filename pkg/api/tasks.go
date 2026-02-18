@@ -42,6 +42,14 @@ type RequestPMVMatch struct {
 	DryRun bool `json:"dry_run"`
 }
 
+type RequestPMVMatchBatch struct {
+	DryRun      bool   `json:"dry_run"`
+	Limit       int    `json:"limit"`
+	Concurrency int    `json:"concurrency"`
+	VolumeID    uint   `json:"volume_id"`
+	PathPrefix  string `json:"path_prefix"`
+}
+
 type ResponseBackupBundle struct {
 	Response string `json:"status"`
 }
@@ -112,6 +120,13 @@ func (i TaskResource) WebService() *restful.WebService {
 	ws.Route(ws.POST("/pmv-match").To(i.pmvMatch).
 		Metadata(restfulspec.KeyOpenAPITags, tags).
 		Writes(tasks.PMVMatchResult{}))
+
+	ws.Route(ws.POST("/pmv-match-unmatched").To(i.pmvMatchUnmatched).
+		Metadata(restfulspec.KeyOpenAPITags, tags).
+		Writes(tasks.PMVMatchBatchResult{}))
+
+	ws.Route(ws.GET("/pmv-match-unmatched").To(i.pmvMatchUnmatchedTask).
+		Metadata(restfulspec.KeyOpenAPITags, tags))
 
 	return ws
 }
@@ -258,4 +273,41 @@ func (i TaskResource) pmvMatch(req *restful.Request, resp *restful.Response) {
 		return
 	}
 	resp.WriteHeaderAndEntity(statusCode, result)
+}
+
+func (i TaskResource) pmvMatchUnmatched(req *restful.Request, resp *restful.Response) {
+	var r RequestPMVMatchBatch
+	if err := req.ReadEntity(&r); err != nil {
+		APIError(req, resp, http.StatusBadRequest, err)
+		return
+	}
+
+	result, statusCode, err := tasks.MatchPMVUnmatchedFiles(tasks.PMVMatchBatchRequest{
+		DryRun:      r.DryRun,
+		Limit:       r.Limit,
+		Concurrency: r.Concurrency,
+		VolumeID:    r.VolumeID,
+		PathPrefix:  r.PathPrefix,
+	})
+	if err != nil {
+		APIError(req, resp, statusCode, err)
+		return
+	}
+	resp.WriteHeaderAndEntity(statusCode, result)
+}
+
+func (i TaskResource) pmvMatchUnmatchedTask(req *restful.Request, resp *restful.Response) {
+	limit, _ := strconv.Atoi(req.QueryParameter("limit"))
+	concurrency, _ := strconv.Atoi(req.QueryParameter("concurrency"))
+	dryRun, _ := strconv.ParseBool(req.QueryParameter("dry_run"))
+	volumeID64, _ := strconv.ParseUint(req.QueryParameter("volume_id"), 10, 64)
+	pathPrefix := strings.TrimSpace(req.QueryParameter("path_prefix"))
+
+	go tasks.RunPMVMatchUnmatchedTask(tasks.PMVMatchBatchRequest{
+		DryRun:      dryRun,
+		Limit:       limit,
+		Concurrency: concurrency,
+		VolumeID:    uint(volumeID64),
+		PathPrefix:  pathPrefix,
+	})
 }

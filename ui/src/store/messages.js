@@ -4,10 +4,24 @@ const state = {
   lockRescan: false,
   lastRescanMessage: '',
   lastProgressMessage: '',
-  runningScrapers: []
+  runningScrapers: [],
+  serviceLogs: []
+}
+
+const mutations = {
+  addServiceLog (state, payload) {
+    state.serviceLogs.push(payload)
+    if (state.serviceLogs.length > 500) {
+      state.serviceLogs.splice(0, state.serviceLogs.length - 500)
+    }
+  },
+  clearServiceLogs (state) {
+    state.serviceLogs = []
+  }
 }
 
 export default {
   namespaced: true,
-  state
+  state,
+  mutations
 }

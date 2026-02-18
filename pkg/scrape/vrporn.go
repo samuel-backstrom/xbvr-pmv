@@ -51,13 +51,13 @@ func VRPorn(wg *models.ScrapeWG, updateSite bool, knownScenes []string, out chan
 
 				site.GetIfExist(studioId)
 				if site.Name != "" {
-					log.Info("no vrporn scraper id using database %s", site.Name)
+					log.Infof("no vrporn scraper id using database %s", site.Name)
 					// the user has setup a custom site, use the name they specified
 					sc.Studio = site.Name
 				} else {
 					// the user has not setup a custom site, use the name from the api
 					sc.Studio = scene.Get("studio.name").String()
-					log.Info("no vrporn scraper id using api %s", sc.Studio)
+					log.Infof("no vrporn scraper id using api %s", sc.Studio)
 				}
 			}
 

@@ -334,7 +334,7 @@ func (me *contentDirectoryService) Handle(action string, argsXML []byte, r *http
 
 		obj, err := me.objectFromID(browse.ObjectID)
 		if err != nil {
-			return nil, upnp.Errorf(upnpav.NoSuchObjectErrorCode, err.Error())
+			return nil, upnp.Errorf(upnpav.NoSuchObjectErrorCode, "%s", err.Error())
 		}
 
 		switch browse.BrowseFlag {

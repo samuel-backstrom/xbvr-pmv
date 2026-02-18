@@ -20,6 +20,7 @@ const defaultFilterState = {
   releaseMonth: '',
   cast: [],
   sites: [],
+  studios: [],
   tags: [],
   cuepoint: [],
   attributes: [],
@@ -45,6 +46,7 @@ const state = {
   filterOpts: {
     cast: [],
     sites: [],
+    studios: [],
     tags: [],
     volumes: []
   },

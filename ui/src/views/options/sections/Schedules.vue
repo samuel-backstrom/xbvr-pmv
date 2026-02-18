@@ -11,6 +11,7 @@
             <b-tab-item label="Actor Rescrape"/>
             <b-tab-item label="Stashdb Rescrape"/>
             <b-tab-item :label="$t('Link Scenes')"/>
+            <b-tab-item :label="$t('PMV Matching')"/>
       </b-tabs>
       <div class="columns">
         <div class="column">
@@ -250,6 +251,21 @@
                 <div class="column is-one-third" style="margin-left:.75em">{{ delayStartMsg(linkScenesStartDelay) }}</div>
             </b-field>
           </div>
+          <div v-if="activeTab == 6">
+            <h4>{{$t("PMV Matching")}}</h4>
+            <b-field>
+              <b-switch v-model="pmvMatchEnabled">Enable schedule</b-switch>
+            </b-field>
+            <b-field v-if="pmvMatchEnabled">
+              <b-slider v-model="pmvMatchHourInterval" :min="1" :max="23" :step="1" ></b-slider>
+              <div class="column is-one-third" style="margin-left:.75em">{{`Run every ${this.pmvMatchHourInterval} hour${this.pmvMatchHourInterval > 1 ? 's': ''}`}}</div>
+            </b-field>
+            <br/>
+            <b-field label="Startup">
+                <b-slider v-model="pmvMatchStartDelay" :min="0" :max="60" :step="1" ></b-slider>
+                <div class="column is-one-third" style="margin-left:.75em">{{ delayStartMsg(pmvMatchStartDelay) }}</div>
+            </b-field>
+          </div>
             <hr/>
               <b-field grouped>
                 <b-button type="is-primary" @click="saveSettings" style="margin-right:1em">Save settings</b-button>
@@ -319,6 +335,9 @@ export default {
       lastlinkScenesTimeRange: [0,23],
       useLinkScenesTimeRange: false,      
       linkScenesStartDelay: 0,
+      pmvMatchEnabled: false,
+      pmvMatchHourInterval: 12,
+      pmvMatchStartDelay: 0,
       timeRange: ['00:00', '01:00', '02:00', '03:00', '04:00', '05:00', '06:00', '07:00', '08:00', '09:00', '10:00', '11:00',
         '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00',
         '00:00', '01:00', '02:00', '03:00', '04:00', '05:00', '06:00', '07:00', '08:00', '09:00', '10:00', '11:00',
@@ -409,6 +428,8 @@ export default {
           this.linkScenesHourInterval = data.config.cron.linkScenesSchedule.hourInterval
           this.useLinkScenesTimeRange = data.config.cron.linkScenesSchedule.useRange
           this.linkScenesMinuteStart = data.config.cron.linkScenesSchedule.minuteStart          
+          this.pmvMatchEnabled = data.config.cron.pmvMatchSchedule.enabled
+          this.pmvMatchHourInterval = data.config.cron.pmvMatchSchedule.hourInterval
           if (data.config.cron.rescrapeSchedule.hourStart > data.config.cron.rescrapeSchedule.hourEnd) {
             this.rescrapeTimeRange = [data.config.cron.rescrapeSchedule.hourStart, data.config.cron.rescrapeSchedule.hourEnd + 24]
           } else {
@@ -448,6 +469,7 @@ export default {
           this.actorRescrapeStartDelay = data.config.cron.actorRescrapeSchedule.runAtStartDelay          
           this.stashdbRescrapeStartDelay = data.config.cron.stashdbRescrapeSchedule.runAtStartDelay          
           this.linkScenesStartDelay = data.config.cron.linkScenesSchedule.runAtStartDelay          
+          this.pmvMatchStartDelay = data.config.cron.pmvMatchSchedule.runAtStartDelay
           this.isLoading = false
         })
     },
@@ -516,7 +538,14 @@ export default {
           linkScenesMinuteStart: this.linkScenesMinuteStart,
           linkScenesHourStart: this.linkScenesTimeRange[0],
           linkScenesHourEnd: this.linkScenesTimeRange[1],
-          linkScenesStartDelay:this.linkScenesStartDelay          
+          linkScenesStartDelay:this.linkScenesStartDelay,
+          pmvMatchEnabled: this.pmvMatchEnabled,
+          pmvMatchHourInterval: this.pmvMatchHourInterval,
+          pmvMatchUseRange: false,
+          pmvMatchMinuteStart: 0,
+          pmvMatchHourStart: 0,
+          pmvMatchHourEnd: 23,
+          pmvMatchStartDelay: this.pmvMatchStartDelay
         }
       })
         .json()
