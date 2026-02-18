@@ -36,6 +36,12 @@ type RequestSingleScrapeAdditionInfo struct {
 	Required    bool   `json:"required"`
 	Type        string `json:"type"`
 }
+
+type RequestPMVMatch struct {
+	FileID uint `json:"file_id"`
+	DryRun bool `json:"dry_run"`
+}
+
 type ResponseBackupBundle struct {
 	Response string `json:"status"`
 }
@@ -102,6 +108,11 @@ func (i TaskResource) WebService() *restful.WebService {
 
 	ws.Route(ws.GET("/relink_alt_aource_scenes").To(i.relink_alt_aource_scenes).
 		Metadata(restfulspec.KeyOpenAPITags, tags))
+
+	ws.Route(ws.POST("/pmv-match").To(i.pmvMatch).
+		Metadata(restfulspec.KeyOpenAPITags, tags).
+		Writes(tasks.PMVMatchResult{}))
+
 	return ws
 }
 
@@ -232,4 +243,19 @@ func (i TaskResource) scrapeTPDB(req *restful.Request, resp *restful.Response) {
 }
 func (i TaskResource) relink_alt_aource_scenes(req *restful.Request, resp *restful.Response) {
 	go tasks.MatchAlternateSources()
+}
+
+func (i TaskResource) pmvMatch(req *restful.Request, resp *restful.Response) {
+	var r RequestPMVMatch
+	if err := req.ReadEntity(&r); err != nil {
+		APIError(req, resp, http.StatusBadRequest, err)
+		return
+	}
+
+	result, statusCode, err := tasks.MatchPMVFile(r.FileID, r.DryRun)
+	if err != nil {
+		APIError(req, resp, statusCode, err)
+		return
+	}
+	resp.WriteHeaderAndEntity(statusCode, result)
 }

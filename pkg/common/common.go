@@ -16,6 +16,8 @@ type EnvConfigSpec struct {
 	DebugRequests        bool   `envconfig:"DEBUG_REQUESTS" default:"false"`
 	DebugSQL             bool   `envconfig:"DEBUG_SQL" default:"false"`
 	DebugWS              bool   `envconfig:"DEBUG_WS" default:"false"`
+	OpenAIAPIKey         string `envconfig:"OPENAI_API_KEY" required:"false"`
+	OpenAIPMVModel       string `envconfig:"OPENAI_PMV_MODEL" required:"false" default:""`
 	UIUsername           string `envconfig:"UI_USERNAME" required:"false"`
 	UIPassword           string `envconfig:"UI_PASSWORD" required:"false"`
 	DatabaseURL          string `envconfig:"DATABASE_URL" required:"false" default:""`
