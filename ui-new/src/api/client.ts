@@ -156,6 +156,57 @@ export function getFiles() {
   return request<SceneFile[]>('/api/files/list')
 }
 
+// Storage / Volumes
+export interface Volume {
+  id: number
+  type: string
+  path: string
+  last_scan: string
+  is_available: boolean
+  is_enabled: boolean
+  file_count: number
+  unmatched_count: number
+  total_size: number
+}
+
+export interface StorageResponse {
+  volumes: Volume[]
+  match_ohash: boolean
+  video_ext: string[]
+  forbidden_video_ext: string[]
+  default_video_ext: string[]
+}
+
+export function getStorage() {
+  return request<StorageResponse>('/api/options/storage')
+}
+
+export function addStorage(data: { path?: string; token?: string; type: string }) {
+  return request<void>('/api/options/storage', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export function removeStorage(id: number) {
+  return request<void>(`/api/options/storage/${id}`, { method: 'DELETE' })
+}
+
+export function saveStorageOptions(options: { match_ohash: boolean; video_ext: string[] }) {
+  return request<void>('/api/options/storage', {
+    method: 'PUT',
+    body: JSON.stringify(options),
+  })
+}
+
+export function rescanAll() {
+  return fetch('/api/task/rescan')
+}
+
+export function rescanVolume(id: number) {
+  return fetch(`/api/task/rescan/${id}`)
+}
+
 // Options
 export function getVersion() {
   return request<{ current_version: string; latest_version: string }>('/api/options/version-check')
