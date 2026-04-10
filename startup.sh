@@ -10,7 +10,7 @@ WS_PORT="${WS_PORT:-19998}"
 LOG_FILE="${LOG_FILE:-/tmp/xbvr-${WEB_PORT}.log}"
 
 NO_BUILD=0
-BUILD_UI=0
+BUILD_UI=1
 FOREGROUND=0
 
 usage() {
@@ -19,7 +19,8 @@ Usage: ./startup.sh [options]
 
 Options:
   --no-build     Skip go build
-  --build-ui     Build UI bundle before go build (corepack yarn build)
+  --no-build-ui  Skip UI bundle rebuild before go build
+  --build-ui     Force UI bundle rebuild before go build (default)
   --foreground   Run in foreground (no nohup/background)
   -h, --help     Show this help
 
@@ -32,6 +33,9 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-build)
       NO_BUILD=1
+      ;;
+    --no-build-ui)
+      BUILD_UI=0
       ;;
     --build-ui)
       BUILD_UI=1
