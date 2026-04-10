@@ -3,11 +3,13 @@
     <div class="columns">
 
       <div class="column is-one-fifth">
-         <Filters/> 
+         <Filters/>
 
-        <a id="toTop">
-          <b-icon pack="mdi" icon="navigation" />
-        </a>
+        <div id="scrollButtons">
+          <a id="toTop">
+            <b-icon pack="mdi" icon="navigation" />
+          </a>
+        </div>
       </div>
 
       <div class="column is-four-fifths">
@@ -68,18 +70,22 @@ export default {
 </script>
 
 <style scoped>
-  #toTop {
-    display: none;
+  #scrollButtons {
+    display: flex;
+    justify-content: space-between;
     position: fixed;
     bottom: 20px;
     left: 30px;
+    width: 18.5%;
+  }
+  #toTop {
+    display: none;
     background-color: #f0f0f0;
     color: #4a4a4a;
     padding: 15px;
     border-radius: 10px;
     font-size: 18px;
   }
-
   #toTop:hover {
     background-color: #BDBDBD;
   }

@@ -11,7 +11,7 @@
          </div>
     </div>
 
-    <div style="padding-top:4px;">
+    <div class="card-content-area">
       <div class="scene_title">{{actor.name}}</div>
       <a v-if="colleague!=undefined" class="button is-info is-outlined is-small"
         @click="showColleague(actor.name,colleague)"
@@ -180,7 +180,11 @@ export default {
   }
 
   .tag {
-    margin-left: 0.1em;
+    margin-left: 0.2em;
+  }
+
+  .card-content-area {
+    padding: 6px 0 0;
   }
 
   .scene_title {

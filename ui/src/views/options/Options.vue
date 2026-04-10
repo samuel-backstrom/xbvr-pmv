@@ -33,7 +33,7 @@
       </div>
 
       <div class="column">
-        <div style="padding-top:2em">
+        <div class="options-content">
           <Storage v-show="active==='storage'"/>
           <Cache v-show="active==='cache'"/>
           <Previews v-show="active==='previews'"/>
@@ -104,3 +104,9 @@ export default {
   },
 }
 </script>
+
+<style scoped>
+.options-content {
+  padding-top: 2em;
+}
+</style>

@@ -41,7 +41,7 @@
               {{item.duration}}m
             </b-tag>
           </div>
-          <div v-if="this.$store.state.optionsWeb.web.showScriptHeatmap && (files = getFunscripts(this.$store.state.optionsWeb.web.showAllHeatmaps))" style="padding: 0px 5px 5px">
+          <div v-if="this.$store.state.optionsWeb.web.showScriptHeatmap && (files = getFunscripts(this.$store.state.optionsWeb.web.showAllHeatmaps))" style="padding: 0 5px 5px">
             <div v-if="files.length" class="heatmapFunscript">
               <img v-for="file in files" :src="getHeatmapURL(file.id)"/>
             </div>
@@ -50,7 +50,7 @@
       </div>
     </div>
 
-    <div style="padding-top:4px;">
+    <div class="card-content-area">
       <div class="scene_title">{{item.title}}</div>
 
       <hidden-button :item="item" v-if="this.$store.state.optionsWeb.web.sceneHidden"/>
@@ -315,6 +315,10 @@ export default {
 
   .tag {
     margin-left: 0.2em;
+  }
+
+  .card-content-area {
+    padding: 6px 0 0;
   }
 
   .scene_title {

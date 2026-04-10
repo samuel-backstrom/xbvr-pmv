@@ -39,8 +39,8 @@
                   </template>
                 </b-carousel>
                 <div class="flexcentre">
-                <b-button class="button is-primary is-small" style="display: flex; justify-content: center;" v-on:click="setActorImage()">{{$t('Set Main Image')}}</b-button>
-                <b-button v-if="images.length != 0" class="button is-primary is-small" style="display: flex; justify-content: center;margin-left: 1em;" v-on:click="deleteActorImage()">{{$t('Delete Image')}}</b-button>
+                <b-button class="button is-primary is-small" v-on:click="setActorImage()">{{$t('Set Main Image')}}</b-button>
+                <b-button v-if="images.length != 0" class="button is-primary is-small" v-on:click="deleteActorImage()">{{$t('Delete Image')}}</b-button>
                 </div>
               </b-tab-item>
             </b-tabs>
@@ -823,6 +823,7 @@ div.scroll {
 .flexcentre {
   display: flex;
   justify-content: center;
+  gap: 1em;
 }
 
 </style>
