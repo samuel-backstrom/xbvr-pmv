@@ -133,19 +133,34 @@ export default {
 </script>
 
 <style scoped>
+  .card.is-shadowless {
+    background: var(--bg-card) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: var(--radius-md) !important;
+    overflow: hidden;
+    transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
+  }
+  .card.is-shadowless:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg) !important;
+    border-color: var(--accent-primary) !important;
+  }
+
   .button {
     margin-right: 3px;
   }
 
   .bbox {
     flex: 1 0 calc(25%);
-    background: #f0f0f0;
+    background: var(--bg-surface);
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
     padding: 0;
     line-height: 0;
+    cursor: pointer;
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
   }
 
   .bbox:not(:hover) > video {
@@ -160,12 +175,12 @@ export default {
   }
 
   .overlay {
-   position: absolute;
-  bottom: 0;
-  right: 0;
-  display: flex;  
-  padding: 5px;
-  max-width: 5px;
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    display: flex;
+    padding: 5px;
+    max-width: 5px;
   }
 
   .align-bottom-left {
@@ -184,14 +199,18 @@ export default {
   }
 
   .card-content-area {
-    padding: 6px 0 0;
+    padding: 8px 10px 6px;
+    color: var(--text-primary);
   }
 
   .scene_title {
-    font-size: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
     text-align: right;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    color: var(--text-primary);
+    margin-bottom: 2px;
   }
 </style>

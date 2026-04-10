@@ -42,21 +42,27 @@ export default {
   min-height: 70vh;
   max-height: 78vh;
   overflow: auto;
-  background: #111;
-  border-radius: 4px;
-  padding: 0.75em;
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  padding: 1em;
+  border: 1px solid var(--border-color);
 }
 
 .log-line {
-  font-family: monospace;
-  font-size: 0.9em;
-  color: #ddd;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.85em;
+  color: var(--text-primary);
   margin-bottom: 0.35em;
-  line-height: 1.35;
+  line-height: 1.4;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+.log-line:hover {
+  background: var(--bg-surface);
 }
 
 .log-ts {
-  color: #999;
+  color: var(--text-muted);
   margin-right: 0.5em;
 }
 
@@ -66,22 +72,23 @@ export default {
   font-weight: 600;
   text-transform: uppercase;
   margin-right: 0.5em;
+  font-size: 0.8em;
 }
 
 .log-level.is-error {
-  color: #ff5a5a;
+  color: var(--accent-danger);
 }
 
 .log-level.is-warning {
-  color: #ffbf47;
+  color: var(--accent-warning);
 }
 
 .log-level.is-info {
-  color: #6ec1ff;
+  color: var(--accent-info);
 }
 
 .log-level.is-debug {
-  color: #9f9f9f;
+  color: var(--text-muted);
 }
 
 .log-msg {

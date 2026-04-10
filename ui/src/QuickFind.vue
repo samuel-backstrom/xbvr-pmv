@@ -215,7 +215,7 @@ export default {
 <style scoped>
   .modal {
     justify-content: normal;
-    padding-top: 9em;
+    padding-top: 8em;
   }
 
   .queryInput {
@@ -227,5 +227,14 @@ export default {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+</style>
+
+<style>
+  .quickfind-modal .modal-card,
+  .quickfind-modal .animation-content {
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
   }
 </style>

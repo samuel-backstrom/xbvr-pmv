@@ -107,6 +107,13 @@ export default {
 
 <style scoped>
 .options-content {
-  padding-top: 2em;
+  padding-top: 1.5em;
+}
+.custom-menu {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  padding: 1em;
+  margin-top: 1em;
 }
 </style>

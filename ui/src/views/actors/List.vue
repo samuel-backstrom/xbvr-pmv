@@ -295,5 +295,7 @@ export default {
 <style scoped>
   .list-header-label {
     padding-right: 1em;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
   }
 </style>

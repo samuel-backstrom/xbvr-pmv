@@ -258,19 +258,34 @@ export default {
 </script>
 
 <style scoped>
+  .card.is-shadowless {
+    background: var(--bg-card) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: var(--radius-md) !important;
+    overflow: hidden;
+    transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
+  }
+  .card.is-shadowless:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg) !important;
+    border-color: var(--accent-primary) !important;
+  }
+
   .button {
     margin-right: 3px;
   }
 
   .bbox {
     flex: 1 0 calc(25%);
-    background: #f0f0f0;
+    background: var(--bg-surface);
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
     padding: 0;
     line-height: 0;
+    cursor: pointer;
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
   }
 
   .bbox:not(:hover) > video {
@@ -298,13 +313,14 @@ export default {
     right: 0;
     bottom: 0;
     pointer-events: none;
+    background: linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 50%);
   }
 
   .align-bottom-left {
     align-items: flex-end;
     justify-content: flex-end;
     flex-wrap: wrap;
-    flex-direction: column
+    flex-direction: column;
   }
 
   .bbox:after {
@@ -315,35 +331,39 @@ export default {
 
   .tag {
     margin-left: 0.2em;
+    backdrop-filter: blur(4px);
   }
 
   .card-content-area {
-    padding: 6px 0 0;
+    padding: 8px 10px 6px;
+    color: var(--text-primary);
   }
 
   .scene_title {
-    font-size: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
     text-align: right;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    color: var(--text-primary);
+    margin-bottom: 2px;
   }
 
-.heatmapFunscript {
-  width: auto;
-}
+  .heatmapFunscript {
+    width: auto;
+  }
 
-.heatmapFunscript img {
-  border: 1px #888 solid;
-  width: 100%;
-  height: 15px;
-  border-radius: 0.25rem;
-}
+  .heatmapFunscript img {
+    border: 1px solid var(--border-color);
+    width: 100%;
+    height: 15px;
+    border-radius: 4px;
+  }
 
-.altsrc-image-wrapper {
-  display: inline-block;
-  margin-right: 5px;
-  margin-top: 3px;
-}
-
+  .altsrc-image-wrapper {
+    display: inline-block;
+    margin-right: 5px;
+    margin-top: 3px;
+  }
 </style>

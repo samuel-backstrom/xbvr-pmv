@@ -172,7 +172,7 @@ export default {
   .bbox {
     flex: 1 0 calc(25% - 10px);
     margin: 5px;
-    background: #f0f0f0;
+    background: var(--bg-surface);
     display: flex;
     align-items: center;
     justify-content: center;

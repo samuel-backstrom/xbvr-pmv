@@ -455,8 +455,8 @@ export default {
   }
 
   a:hover .tag.is-medium {
-    background-color: #3273dc !important;
-    color: white !important;
+    background-color: var(--accent-primary) !important;
+    color: #fff !important;
   }
 
   .card {

@@ -547,7 +547,11 @@ export default {
 }
 
 .is-divider {
-  margin: 1.5rem 0;
+  margin: 1.2rem 0;
+  border-top-color: var(--border-color) !important;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .field-extra {
@@ -559,6 +563,7 @@ export default {
 }
 .slider-title {
   width: 80px;
+  color: var(--text-secondary);
 }
 .slider {
   margin-right: 3em;
