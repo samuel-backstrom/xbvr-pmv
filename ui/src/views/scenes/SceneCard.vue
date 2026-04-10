@@ -41,7 +41,7 @@
               {{item.duration}}m
             </b-tag>
           </div>
-          <div v-if="this.$store.state.optionsWeb.web.showScriptHeatmap && (files = getFunscripts(this.$store.state.optionsWeb.web.showAllHeatmaps))" style="padding: 0 5px 5px">
+          <div v-if="this.$store.state.optionsWeb.web.showScriptHeatmap && (files = getFunscripts(this.$store.state.optionsWeb.web.showAllHeatmaps))" style="padding: 0px 5px 5px">
             <div v-if="files.length" class="heatmapFunscript">
               <img v-for="file in files" :src="getHeatmapURL(file.id)"/>
             </div>
@@ -50,7 +50,7 @@
       </div>
     </div>
 
-    <div class="card-content-area">
+    <div style="padding-top:4px;">
       <div class="scene_title">{{item.title}}</div>
 
       <hidden-button :item="item" v-if="this.$store.state.optionsWeb.web.sceneHidden"/>
@@ -95,6 +95,7 @@ import EditButton from '../../components/EditButton'
 import LinkStashdbButton from '../../components/LinkStashdbButton'
 import TrailerlistButton from '../../components/TrailerlistButton'
 import HiddenButton from '../../components/HiddenButton'
+import ky from 'ky'
 import VueLoadImage from 'vue-load-image'
 
 export default {
@@ -219,11 +220,18 @@ export default {
           } 
     },
     showDetails (scene) {
-      this.$router.push({
-        name: 'scene',
-        params: { id: String(scene.id) },
-        query: this.$route.query
-      })
+      // reRead is required when the SceneCard is clicked from the ActorDetails
+      // the Scenes associated Tables such as Tags, Cast arwon't be Preloaded and
+      // will cause errors when the Details Overlay loads
+      if (this.reRead) {
+        ky.get('/api/scene/'+scene.id).json().then(data => {
+          if (data.id != 0){
+            this.$store.commit('overlay/showDetails', { scene: data })
+          }
+        })
+      } else {
+        this.$store.commit('overlay/showDetails', { scene: scene })
+      }
       this.$store.commit('overlay/hideActorDetails')
     },
     getHeatmapURL (fileId) {
@@ -277,10 +285,6 @@ export default {
     padding: 0;
     line-height: 0;
     cursor: pointer;
-<<<<<<< HEAD
-    border-radius: var(--radius-md) var(--radius-md) 0 0;
-=======
->>>>>>> d18040f (changes)
   }
 
   .bbox:not(:hover) > video {
