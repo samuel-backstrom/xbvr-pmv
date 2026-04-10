@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface-950 text-surface-100 font-sans antialiased;
+    overflow: hidden;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-surface-600 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-surface-500;
+  }
+
+  * {
+    scrollbar-color: theme('colors.surface.600') transparent;
+    scrollbar-width: thin;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply bg-surface-800/60 backdrop-blur-md border border-surface-700/50;
+  }
+  .glass-strong {
+    @apply bg-surface-800/80 backdrop-blur-xl border border-surface-600/50;
+  }
+  .card-hover {
+    @apply transition-all duration-300 ease-out;
+  }
+  .card-hover:hover {
+    @apply -translate-y-1 shadow-xl shadow-black/30;
+    border-color: theme('colors.accent.DEFAULT');
+  }
+  .gradient-accent {
+    @apply bg-gradient-to-r from-accent to-cyber-blue;
+  }
+  .gradient-text {
+    @apply bg-gradient-to-r from-accent to-cyber-blue bg-clip-text text-transparent;
+  }
+  .btn-primary {
+    @apply px-4 py-2 rounded-lg gradient-accent text-white font-medium
+           hover:opacity-90 transition-opacity duration-150 text-sm;
+  }
+  .btn-ghost {
+    @apply px-3 py-1.5 rounded-lg bg-surface-700/50 text-surface-200
+           hover:bg-surface-600/50 hover:text-white transition-colors duration-150 text-sm;
+  }
+  .input-dark {
+    @apply w-full px-3 py-2 rounded-lg bg-surface-800 border border-surface-600
+           text-surface-100 placeholder-surface-500 text-sm
+           focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30
+           transition-colors duration-150;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium;
+  }
+}
