@@ -13,7 +13,7 @@ export default function CommandPalette() {
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
-  const timerRef = useRef<ReturnType<typeof setTimeout>>()
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Keyboard shortcut
   useEffect(() => {
@@ -40,7 +40,7 @@ export default function CommandPalette() {
   // Debounced search
   useEffect(() => {
     if (!query.trim()) { setResults([]); return }
-    clearTimeout(timerRef.current)
+    if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(async () => {
       setLoading(true)
       try {
@@ -50,7 +50,9 @@ export default function CommandPalette() {
       } catch { setResults([]) }
       setLoading(false)
     }, 250)
-    return () => clearTimeout(timerRef.current)
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
   }, [query])
 
   const handleKey = (e: React.KeyboardEvent) => {

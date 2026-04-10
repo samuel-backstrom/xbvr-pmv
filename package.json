@@ -2,14 +2,15 @@
   "name": "xbvr",
   "private": true,
   "scripts": {
-    "serve": "cd ui && vue-cli-service serve",
-    "build": "cd ui && vue-cli-service build",
+    "serve": "npm --prefix ui-new run dev",
+    "build": "npm --prefix ui-new run build",
+    "build:old-ui": "cd ui && vue-cli-service build",
     "lint": "cd ui && vue-cli-service lint",
     "i18n:report": "vue-cli-service i18n:report --src './src/**/*.?(js|vue)' --locales './src/locales/**/*.json'",
     "i18n:extract": "yarn vue-i18n-extract report -v './ui/src/**/*.?(js|vue)' -l './ui/src/locales/*.?(js|json)'",
     "dev": "concurrently 'go generate' 'npm:dev:ui' 'npm:dev:go'",
     "dev:go": "air",
-    "dev:ui": "cd ui && vue-cli-service build --watch --silent"
+    "dev:ui": "npm --prefix ui-new run build:watch"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "5.15.4",
