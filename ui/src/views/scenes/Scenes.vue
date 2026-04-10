@@ -88,17 +88,24 @@ export default {
     bottom: 20px;
     left: 30px;
     width: 18.5%;
+    z-index: 30;
   }
   #toTop, #toggleInfiniteScroll {
     display: none;
-    background-color: #f0f0f0;
-    color: #4a4a4a;
-    padding: 15px;
-    border-radius: 10px;
+    background-color: var(--bg-card);
+    color: var(--text-secondary);
+    padding: 14px;
+    border-radius: var(--radius-md);
     font-size: 18px;
     margin-right: 8px;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-md);
+    transition: all var(--transition-fast);
   }
   #toTop:hover, #toggleInfiniteScroll:hover {
-    background-color: #BDBDBD;
+    background-color: var(--accent-primary);
+    color: #fff;
+    border-color: var(--accent-primary);
+    box-shadow: 0 4px 16px rgba(108, 92, 231, 0.3);
   }
 </style>

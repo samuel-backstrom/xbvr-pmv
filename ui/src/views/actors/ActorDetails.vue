@@ -668,6 +668,8 @@ export default {
 
 .modal-card {
   width: 85%;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
 }
 
 .missing {
@@ -679,6 +681,10 @@ export default {
 }
 
 .block-info {
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  padding: 1em;
+  border: 1px solid var(--border-color);
 }
 
 .block-tags {
@@ -700,10 +706,10 @@ export default {
 
 .scene-id {
   position: absolute;
-  right:10px;
+  right: 10px;
   bottom: 5px;
   font-size: 11px;
-  color: #b0b0b0;
+  color: var(--text-muted);
 }
 
 .prev, .next {
@@ -716,19 +722,24 @@ export default {
   color: white;
   font-weight: bold;
   font-size: 24px;
-  border-radius: 0 3px 3px 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   user-select: none;
   -webkit-user-select: none;
+  background: rgba(0, 0, 0, 0.3);
+  transition: background var(--transition-fast);
+}
+.prev:hover, .next:hover {
+  background: rgba(108, 92, 231, 0.5);
 }
 
 .next {
   right: 0;
-  border-radius: 3px 0 0 3px;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
 }
 
 .prev {
   left: 0;
-  border-radius: 3px 0 0 3px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
 span.is-active img {
@@ -736,7 +747,7 @@ span.is-active img {
 }
 
 .pathDetails {
-  color: #b0b0b0;
+  color: var(--text-muted);
 }
 
 .heatmapFunscript {
@@ -746,14 +757,15 @@ span.is-active img {
 }
 
 .heatmapFunscript img {
-  border: 1px #888 solid;
+  border: 1px solid var(--border-color);
   width: 100%;
   height: 20px;
   margin: 0;
   padding: 0;
+  border-radius: 4px;
 }
 .videosize {
-  color: rgb(60, 60, 60);
+  color: var(--text-secondary);
   font-weight: 550;
 }
 
@@ -772,7 +784,7 @@ span.is-active img {
   margin: .8rem 0;
 }
 .image-row {
-  display: flex;  
+  display: flex;
 }
 .image-wrapper {
   position: relative;
@@ -781,6 +793,11 @@ span.is-active img {
   height: 100px;
   margin-right: .5em;
   object-fit: cover;
+  border-radius: var(--radius-sm);
+  transition: transform var(--transition-fast);
+}
+.thumbnail:hover {
+  transform: scale(1.05);
 }
 .tooltip {
   position: absolute;
@@ -789,13 +806,15 @@ span.is-active img {
   right: 100%;
   width: 400px;
   height: 400px;
-  background-color: white;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  background-color: var(--bg-card);
+  box-shadow: var(--shadow-lg);
   display: flex;
   justify-content: center;
   align-items: center;
   padding: 10px;
   transform: translateX(10px);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
 }
 .tooltip img {
   max-width: 100%;
@@ -807,23 +826,28 @@ div.scroll {
   overflow-y: auto;
   text-align: center;
 }
-.attribute-container {  
-  display: flex; 
+.attribute-container {
+  display: flex;
   flex-wrap: wrap;
 }
-.attribute-heading {  
-  width: 120px; 
+.attribute-heading {
+  width: 120px;
+  color: var(--text-muted);
+  font-weight: 500;
 }
-.attribute-data {  
-  width: 200px;  
+.attribute-data {
+  width: 200px;
+  color: var(--text-primary);
 }
-.attribute-long-data {  
-  min-width: 320px;  
+.attribute-long-data {
+  min-width: 320px;
+  color: var(--text-primary);
 }
 .flexcentre {
   display: flex;
   justify-content: center;
   gap: 1em;
+  margin-top: 0.75em;
 }
 
 </style>
