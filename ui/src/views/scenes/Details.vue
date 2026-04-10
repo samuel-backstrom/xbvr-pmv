@@ -1,5 +1,5 @@
 <template>
-  <div class="modal is-active">
+  <div :class="containerClass">
     <GlobalEvents
       :filter="e => !['INPUT', 'TEXTAREA'].includes(e.target.tagName)"
       @keyup.esc="close"
@@ -17,13 +17,13 @@
       @keydown.48="setRating(0)"
     />
 
-    <div class="modal-background"></div>
+    <div v-if="!embedded" class="modal-background"></div>
 
     <div class="modal-card">
       <section class="modal-card-body">
-        <div class="columns">
+        <div :class="layoutClass">
 
-          <div class="column is-half">
+          <div :class="mediaColumnClass">
             <b-tabs v-model="activeMedia" position="is-centered" :animated="false">
 
               <b-tab-item label="Gallery">
@@ -68,7 +68,7 @@
 
           </div>
 
-          <div class="column is-half">
+          <div :class="infoColumnClass">
 
             <div class="block-info block">
               <div class="content">
@@ -240,6 +240,14 @@
                           <b-icon pack="mdi" icon="pulse"></b-icon>
                         </button>
                         </b-tooltip>
+                        <b-tooltip :label="$t('Send this script to The Handy')" position="is-right">
+                        <b-button rounded size="is-small" type="is-primary" outlined @click='sendScriptToHandy(f)'
+                          v-show="f.type === 'script'"
+                          :loading="handyTransferingFileId === f.id"
+                          :disabled="handyTransferingFileId !== 0 && handyTransferingFileId !== f.id">
+                          <b-icon pack="mdi" icon="upload"></b-icon>
+                        </b-button>
+                        </b-tooltip>
                         <button rounded class="button is-info is-small is-outlined" disabled
                                 v-show="f.type === 'hsp'">
                           <b-icon pack="mdi" icon="safety-goggles"></b-icon>
@@ -390,7 +398,9 @@
         </a>
       </div>
     </div>
-    <button class="modal-close is-large" aria-label="close" @click="close()"></button>
+    <button v-if="!embedded" class="modal-close is-large" aria-label="close" @click="close()"></button>
+    <button v-else-if="!isStandalonePage" class="button is-small is-light scene-details-inline-close" @click="close()">Close</button>
+    <button v-else class="button is-small is-light scene-details-page-back" @click="close()">Back to scenes</button>
     <a class="prev" @click="prevScene" v-if="$store.getters['sceneList/prevScene'](item) !== null && !displayingAlternateSource"
        title="Keyboard shortcut: O">&#10094;</a>
     <a class="next" @click="nextScene" v-if="$store.getters['sceneList/nextScene'](item) !== null && !displayingAlternateSource"
@@ -417,9 +427,16 @@ import RefreshButton from '../../components/RefreshButton'
 import RescrapeButton from '../../components/RescrapeButton'
 import TrailerlistButton from '../../components/TrailerlistButton'
 import HiddenButton from '../../components/HiddenButton'
+import { loadHandyConfig, selectHandyScriptFile, sendHandyTransfer, stopHandyScript } from '../../lib/handy'
 
 export default {
   name: 'Details',
+  props: {
+    embedded: {
+      type: Boolean,
+      default: false
+    }
+  },
   components: { VueLoadImage, GlobalEvents, StarRating, WatchlistButton, FavouriteButton, LinkStashdbButton, WishlistButton, WatchedButton, EditButton, RefreshButton, RescrapeButton, TrailerlistButton, HiddenButton },
   data () {
     return {
@@ -449,11 +466,42 @@ export default {
       searchfields: [],
       alternateSources: [],
       waitingForQuickFind: false,
+      handyReady: false,
+      handyScriptFileId: 0,
+      handySetupPromise: null,
+      handyClosed: false,
+      handyTransferingFileId: 0,
     }
   },
   computed: {
+    containerClass () {
+      if (!this.embedded) return 'modal is-active'
+      return this.isStandalonePage ? 'scene-details-page' : 'scene-details-inline'
+    },
+    layoutClass () {
+      return this.isStandalonePage ? 'scene-details-page-layout' : 'columns'
+    },
+    mediaColumnClass () {
+      return this.isStandalonePage ? 'scene-details-page-media' : 'column is-half'
+    },
+    infoColumnClass () {
+      return this.isStandalonePage ? 'scene-details-page-info' : 'column is-half'
+    },
     item () {
-      const item = this.$store.state.overlay.details.scene
+      const item = this.embedded
+        ? this.$store.state.overlay.inlineDetails.scene
+        : this.$store.state.overlay.details.scene
+      if (!item) {
+        return {
+          cast: [],
+          tags: [],
+          file: [],
+          history: [],
+          images: '[]',
+          release_date: '0001-01-01T00:00:00Z',
+          scene_id: 0
+        }
+      }
       if (this.$store.state.optionsWeb.web.tagSort === 'alphabetically') {
         item.tags.sort((a, b) => a.name < b.name ? -1 : 1)
       }
@@ -524,9 +572,23 @@ export default {
       }
       return 0
     },
+    bestVideoFile () {
+      const videoFiles = (this.item.file || []).filter(f => f.type === 'video')
+      if (videoFiles.length === 0) {
+        return null
+      }
+      return videoFiles.slice().sort(this.compareVideoQuality)[0]
+    },
     filesByType () {
       if (this.item.file !== null) {
-        return this.item.file.slice().sort((a, b) => (a.type === 'video') ? -1 : 1)
+        return this.item.file.slice().sort((a, b) => {
+          if (a.type === 'video' && b.type === 'video') {
+            return this.compareVideoQuality(a, b)
+          }
+          if (a.type === 'video') return -1
+          if (b.type === 'video') return 1
+          return 0
+        })
       }
       return []
     },
@@ -566,7 +628,10 @@ export default {
       // displayingAlternateSource indicates we aren't displaying a real xbvr scene from the scenes table,
       //  so functions like watchlist, ratings, etc don't apply
       // we are displaying scene data serialized and saved in the external_references table
-      if ( this.$store.state.overlay.details.altsrc != null) return true
+      const overlayState = this.embedded
+        ? this.$store.state.overlay.inlineDetails
+        : this.$store.state.overlay.details
+      if (overlayState.altsrc != null) return true
       return false
     },
     async getAlternateSceneSources() {
@@ -596,6 +661,12 @@ export default {
     showOpenInNewWindow () {
       return this.$store.state.optionsWeb.web.showOpenInNewWindow
     },
+    isStandalonePage () {
+      return this.embedded && this.$route.name === 'scene'
+    },
+    playerAspectRatio () {
+      return this.isStandalonePage ? '16:9' : '1:1'
+    },
     alternateSourcesWithTitles() {
       return this.alternateSources.map(altsrc => {
         const extdata = JSON.parse(altsrc.external_data);
@@ -607,7 +678,11 @@ export default {
     }
   },
   mounted () {
+    if (this.isStandalonePage && !this.displayingAlternateSource) {
+      this.activeMedia = 1
+    }
     this.setupPlayer()
+    this.handySetupPromise = this.setupHandy()
 
     // load default cuepoint actions & positions from kv entry in the db
     ky.get('/api/options/cuepoints').json().then(data => {
@@ -649,18 +724,59 @@ watch:{
     // Auto-load first video when Player tab is opened (without auto-playing)
     // The webUI video player doesn't work for some users without autoloading
     if (newVal === 1 && !this.displayingAlternateSource) {
-      const videoFiles = this.filesByType.filter(f => f.type === 'video')
-      if (videoFiles.length > 0) {
+      if (this.bestVideoFile) {
         this.activeMedia = 1
-        this.updatePlayer('/api/dms/file/' + videoFiles[0].id + '?dnt=true', (videoFiles[0].projection == 'flat' ? 'NONE' : '180'))
+        this.updatePlayer('/api/dms/file/' + this.bestVideoFile.id + '?dnt=true', 'NONE')
       }
     }
   }
 },
   methods: {
+    compareVideoQuality (a, b) {
+      const numericFields = [
+        'video_height',
+        'video_bitrate',
+        'video_width',
+        'size'
+      ]
+
+      for (const field of numericFields) {
+        const av = Number(a[field] || 0)
+        const bv = Number(b[field] || 0)
+        if (av !== bv) {
+          return bv - av
+        }
+      }
+
+      const aTime = Date.parse(a.created_time || '') || 0
+      const bTime = Date.parse(b.created_time || '') || 0
+      if (aTime !== bTime) {
+        return bTime - aTime
+      }
+
+      return (a.filename || '').localeCompare(b.filename || '')
+    },
+    showSceneOverlay (payload) {
+      if (this.isStandalonePage && payload && payload.scene && payload.scene.id) {
+        this.$store.commit('overlay/showInlineDetails', payload)
+        if (String(this.$route.params.id) !== String(payload.scene.id)) {
+          this.$router.push({
+            name: 'scene',
+            params: { id: String(payload.scene.id) },
+            query: this.$route.query
+          })
+        }
+        return
+      }
+      if (this.embedded) {
+        this.$store.commit('overlay/showInlineDetails', payload)
+      } else {
+        this.$store.commit('overlay/showDetails', payload)
+      }
+    },
     setupPlayer () {
       this.player = videojs(this.$refs.player, {
-        aspectRatio: '1:1',
+        aspectRatio: this.playerAspectRatio,
         fluid: true,
         loop: true
       })
@@ -677,8 +793,7 @@ watch:{
               return event.which === 27
             },
             handler: (player, options, event) => {
-              if (!this.displayingAlternateSource) this.player.dispose()
-              this.$store.commit('overlay/hideDetails')
+              this.close()
             }
           },
           zoomIn: {
@@ -696,9 +811,24 @@ watch:{
 
       const videoElement = this.player.el();
       videoElement.addEventListener('wheel', this.zoomHandlerWeb.bind(this))
+      this.player.on('play', () => {
+        this.syncHandyPlayback()
+      })
+      this.player.on('pause', () => {
+        this.stopHandyPlayback()
+      })
+      this.player.on('ended', () => {
+        this.stopHandyPlayback()
+      })
+      this.player.on('seeked', () => {
+        this.syncHandyPlayback()
+      })
     },
 
     zoomHandlerWeb(event) {
+      if (!(event.ctrlKey || event.metaKey)) {
+        return
+      }
       event.preventDefault();
       this.zoomHandler(event.deltaY < 0)
     },
@@ -719,6 +849,161 @@ watch:{
 
       vr.camera.fov = fov;
       vr.camera.updateProjectionMatrix()
+    },
+    async setupHandy () {
+      try {
+        if (this.displayingAlternateSource) {
+          return
+        }
+
+        const handyConfig = await loadHandyConfig()
+        if (this.handyClosed || !handyConfig.enabled || !handyConfig.connection_key) {
+          return
+        }
+
+        const scriptFile = selectHandyScriptFile(this.item)
+        if (!scriptFile) {
+          console.info('[Handy] no funscript found for scene', { sceneId: this.item?.id })
+          return
+        }
+
+        await this.transferHandyScript(scriptFile, {
+          context: 'scene',
+          handyConfig,
+          syncPlayback: true
+        })
+      } catch (error) {
+        console.warn('[Handy] scene player setup failed', error)
+      }
+    },
+    async transferHandyScript (scriptFile, options = {}) {
+      if (!scriptFile || this.handyClosed) {
+        return false
+      }
+
+      const context = options.context || 'manual'
+      const handyConfig = options.handyConfig || await loadHandyConfig()
+      if (!handyConfig.enabled || !handyConfig.connection_key) {
+        if (context === 'manual') {
+          this.$buefy.toast.open({
+            message: 'The Handy is disabled or missing a connection key.',
+            type: 'is-warning',
+            duration: 3500
+          })
+        }
+        return false
+      }
+
+      if (this.handyTransferingFileId === scriptFile.id) {
+        return false
+      }
+
+      this.handyTransferingFileId = scriptFile.id
+      try {
+        console.info('[Handy] preparing script upload', { context, sceneId: this.item?.id, scriptId: scriptFile.id })
+        const play = Boolean(options.play)
+        const startTimeMs = typeof options.startTimeMs === 'number'
+          ? options.startTimeMs
+          : 0
+        const result = await sendHandyTransfer(this.item.id, scriptFile.id, startTimeMs, play)
+        if (this.handyClosed) {
+          return false
+        }
+
+        this.handyScriptFileId = scriptFile.id
+        this.handyReady = true
+        console.info('[Handy] script uploaded', { context, sceneId: this.item?.id, scriptId: scriptFile.id, result })
+
+        if (options.syncPlayback && !this.player.paused()) {
+          await this.syncHandyPlayback()
+        }
+
+        if (context === 'manual') {
+          this.$buefy.toast.open({
+            message: `Sent ${scriptFile.filename} to The Handy.`,
+            type: 'is-primary',
+            duration: 3000
+          })
+        }
+        return true
+      } catch (error) {
+        console.warn('[Handy] script transfer failed', { context, sceneId: this.item?.id, scriptId: scriptFile.id, error })
+        if (context === 'manual') {
+          this.$buefy.toast.open({
+            message: `Failed to send ${scriptFile.filename} to The Handy.`,
+            type: 'is-danger',
+            duration: 3500
+          })
+        }
+        return false
+      } finally {
+        if (this.handyTransferingFileId === scriptFile.id) {
+          this.handyTransferingFileId = 0
+        }
+      }
+    },
+    async sendScriptToHandy (file) {
+      if (!file || file.type !== 'script') {
+        return
+      }
+
+      if (this.handyTransferingFileId === file.id) {
+        return
+      }
+
+      this.handyTransferingFileId = file.id
+      try {
+        const play = Boolean(this.player && typeof this.player.paused === 'function' && !this.player.paused())
+        const startTimeMs = this.player && typeof this.player.currentTime === 'function'
+          ? Math.round(this.player.currentTime() * 1000)
+          : 0
+
+        const result = await sendHandyTransfer(this.item.id, file.id, startTimeMs, play)
+
+        this.handyScriptFileId = file.id
+        this.handyReady = true
+        console.info('[Handy] manual transfer completed', result)
+        this.$buefy.toast.open({
+          message: `Sent ${file.filename} to The Handy.`,
+          type: 'is-primary',
+          duration: 3000
+        })
+      } catch (error) {
+        console.warn('[Handy] manual transfer failed', { sceneId: this.item?.id, scriptId: file.id, error })
+        this.$buefy.toast.open({
+          message: `Failed to send ${file.filename} to The Handy.`,
+          type: 'is-danger',
+          duration: 3500
+        })
+      } finally {
+        if (this.handyTransferingFileId === file.id) {
+          this.handyTransferingFileId = 0
+        }
+      }
+    },
+    async syncHandyPlayback () {
+      if (!this.handyReady || this.handyClosed || this.player.paused() || !this.handyScriptFileId) {
+        return
+      }
+
+      if (!this.item || !this.item.id) {
+        return
+      }
+
+      await sendHandyTransfer(this.item.id, this.handyScriptFileId, Math.round(this.player.currentTime() * 1000), true)
+    },
+    async stopHandyPlayback () {
+      if (!this.handyReady || this.handyClosed) {
+        return
+      }
+
+      try {
+        console.info('[Handy] stopping script for scene player', { sceneId: this.item?.id })
+        await stopHandyScript()
+        console.info('[Handy] stopped script for scene player', { sceneId: this.item?.id })
+      } catch (error) {
+        console.warn('[Handy] scene player stop failed', error)
+      }
     },
     updatePlayer (src, projection) {
       this.player.reset()
@@ -817,7 +1102,7 @@ watch:{
     },
     playFile (file) {
       this.activeMedia = 1
-      this.updatePlayer('/api/dms/file/' + file.id + '?dnt=true', (file.projection == 'flat' ? 'NONE' : '180'))
+      this.updatePlayer('/api/dms/file/' + file.id + '?dnt=true', 'NONE')
       this.player.play()
     },
     unmatchFile (file) {
@@ -829,7 +1114,7 @@ watch:{
         id: 'heh',
         onConfirm: () => {
           ky.post(`/api/files/unmatch`, {json:{file_id: file.id}}).json().then(data => {
-            this.$store.commit('overlay/showDetails', { scene: data })
+            this.showSceneOverlay({ scene: data })
           })
         }
       })
@@ -842,7 +1127,7 @@ watch:{
         hasIcon: true,
         onConfirm: () => {
           ky.delete(`/api/files/file/${file.id}`).json().then(data => {
-            this.$store.commit('overlay/showDetails', { scene: data })
+            this.showSceneOverlay({ scene: data })
           })
         }
       })
@@ -853,7 +1138,7 @@ watch:{
           file_id: file.id,
         }
       }).json().then(data => {
-          this.$store.commit('overlay/showDetails', { scene: data })
+          this.showSceneOverlay({ scene: data })
       })
     },
     getImageURL (u, size) {
@@ -933,19 +1218,40 @@ watch:{
         this.cuepointName=''
         this.track = null
         this.$store.commit('sceneList/updateScene', data)
-        this.$store.commit('overlay/showDetails', { scene: data })
+        this.showSceneOverlay({ scene: data })
       })
     },
     deleteCuepoint (cuepointid) {
       ky.delete(`/api/scene/${this.item.id}/cuepoint/${cuepointid}`)
         .json().then(data => {
           this.$store.commit('sceneList/updateScene', data)
-          this.$store.commit('overlay/showDetails', { scene: data })
+          this.showSceneOverlay({ scene: data })
         })
     },
-    close () {
+    async close () {
+      if (this.handyReady) {
+        try {
+          await stopHandyScript()
+        } catch (error) {
+          console.warn('[Handy] scene player close stop failed', error)
+        }
+      }
+      this.handyClosed = true
+      if (this.player && !this.player.paused()) {
+        this.player.pause()
+      }
       if (!this.displayingAlternateSource) this.player.dispose()
-      this.$store.commit('overlay/hideDetails')
+      if (this.isStandalonePage) {
+        this.$store.commit('overlay/hideInlineDetails')
+        this.$router.push({
+          name: 'scenes',
+          query: this.$route.query
+        })
+      } else if (this.embedded) {
+        this.$store.commit('overlay/hideInlineDetails')
+      } else {
+        this.$store.commit('overlay/hideDetails')
+      }
     },
     humanizeSeconds (seconds) {
       return new Date(seconds * 1000).toISOString().substr(11, 8)
@@ -964,8 +1270,8 @@ watch:{
     nextScene () {
       const data = this.$store.getters['sceneList/nextScene'](this.item)
       if (data !== null && !this.displayingAlternateSource) {
-        this.$store.commit('overlay/showDetails', { scene: data })
-        this.activeMedia = 0
+        this.showSceneOverlay({ scene: data })
+        this.activeMedia = this.isStandalonePage ? 1 : 0
         this.carouselSlide = 0
         this.updatePlayer(undefined, '180')
       }
@@ -973,8 +1279,8 @@ watch:{
     prevScene () {
       const data = this.$store.getters['sceneList/prevScene'](this.item)
       if (data !== null && !this.displayingAlternateSource) {
-        this.$store.commit('overlay/showDetails', { scene: data })
-        this.activeMedia = 0
+        this.showSceneOverlay({ scene: data })
+        this.activeMedia = this.isStandalonePage ? 1 : 0
         this.carouselSlide = 0
         this.updatePlayer(undefined, '180')
       }
@@ -1114,20 +1420,22 @@ watch:{
       {
         extdata.scene.cast = []
       }
-      this.$store.commit('overlay/showDetails', { scene: extdata.scene, altsrc: altsrc, prevscene: this.item, query_for_altsrc: extdata.query })
+      this.showSceneOverlay({ scene: extdata.scene, altsrc: altsrc, prevscene: this.item, query_for_altsrc: extdata.query })
       this.activeTab = 0      
     },
     searchAlternateSourceScene() {
       // search for a new scene to link to the alternate source scene
-      const  q = this.$store.state.overlay.details.query_for_altsrc == "" ? this.item.title : this.$store.state.overlay.details.query_for_altsrc      
+      const overlayState = this.embedded ? this.$store.state.overlay.inlineDetails : this.$store.state.overlay.details
+      const q = overlayState.query_for_altsrc == "" ? this.item.title : overlayState.query_for_altsrc
       this.$store.commit('overlay/showQuickFind', { searchString:  q, displaySelectedScene: false })
       this.waitingForQuickFind = true
     }, 
     async handleRelinkExtRef() {
+      const overlayState = this.embedded ? this.$store.state.overlay.inlineDetails : this.$store.state.overlay.details
       const response = await ky.post(`/api/extref/edit_link`, {
         json: {
-          external_source: this.$store.state.overlay.details.altsrc.external_source,
-          external_id: this.$store.state.overlay.details.altsrc.external_id,
+          external_source: overlayState.altsrc.external_source,
+          external_id: overlayState.altsrc.external_id,
           internal_table: "scenes",
           internal_db_id: this.$store.state.overlay.quickFind.selectedScene.id,
           internal_name_id: this.$store.state.overlay.quickFind.selectedScene.scene_id,
@@ -1135,21 +1443,26 @@ watch:{
         }
       });
       if (response.status === 200) {
-        this.$store.state.overlay.details.prevscene = this.$store.state.overlay.quickFind.selectedScene;
+        overlayState.prevscene = this.$store.state.overlay.quickFind.selectedScene;
         this.$buefy.toast.open({ message: `The scene was sucessfully relinked to a new Scene`, type: 'is-primary', duration: 3000 });
       }
     },
     async scrapeScene() {
+      const overlayState = this.embedded ? this.$store.state.overlay.inlineDetails : this.$store.state.overlay.details
       this.$buefy.dialog.confirm({
         title: 'Scrape & Create Scene',
-        message: `Do you wish to create a seperate XBVR scene from this linked scene <strong>${this.$store.state.overlay.details.altsrc.url}</strong>`,
+        message: `Do you wish to create a seperate XBVR scene from this linked scene <strong>${overlayState.altsrc.url}</strong>`,
         type: 'is-info is-wide',
         hasIcon: true,
         id: 'heh',
         onConfirm: () => {
-          const url = this.$store.state.overlay.details.altsrc.url
-          this.$store.state.overlay.details.altsrc = null
-          this.$store.commit('overlay/hideDetails')
+          const url = overlayState.altsrc.url
+          overlayState.altsrc = null
+          if (this.embedded) {
+            this.$store.commit('overlay/hideInlineDetails')
+          } else {
+            this.$store.commit('overlay/hideDetails')
+          }
           // call the options screen passing the url in state   
           this.$store.commit('optionsSceneCreate/setScrapeScene', url )
           this.$store.commit('optionsSceneCreate/showSceneCreate', true )
@@ -1171,14 +1484,15 @@ watch:{
       })
     },
     async handleRefreshExtRef() {
+      const overlayState = this.embedded ? this.$store.state.overlay.inlineDetails : this.$store.state.overlay.details
       const response = await ky.delete(`/api/extref/delete_extref`, {
         json: {
-          external_source: this.$store.state.overlay.details.altsrc.external_source,
-          external_id: this.$store.state.overlay.details.altsrc.external_id,
+          external_source: overlayState.altsrc.external_source,
+          external_id: overlayState.altsrc.external_id,
         }
       });
       if (response.status === 200) {
-        this.$store.state.overlay.details.prevscene = this.$store.state.overlay.quickFind.selectedScene;
+        overlayState.prevscene = this.$store.state.overlay.quickFind.selectedScene;
         this.$buefy.toast.open({ message: `The scene was removed, ready to rescan`, type: 'is-primary', duration: 3000 });
       }
     },
@@ -1196,10 +1510,11 @@ watch:{
       })    
     },    
     async handleFlagExtRefDeleted() {
+      const overlayState = this.embedded ? this.$store.state.overlay.inlineDetails : this.$store.state.overlay.details
       const response = await ky.post(`/api/extref/edit_link`, {
         json: {
-          external_source: this.$store.state.overlay.details.altsrc.external_source,
-          external_id: this.$store.state.overlay.details.altsrc.external_id,
+          external_source: overlayState.altsrc.external_source,
+          external_id: overlayState.altsrc.external_id,
           internal_table: "scenes",
           internal_db_id: 0,
           internal_name_id: "deleted",
@@ -1207,7 +1522,7 @@ watch:{
         }
       });
       if (response.status === 200) {
-        this.$store.state.overlay.details.prevscene = this.$store.state.overlay.quickFind.selectedScene;
+        overlayState.prevscene = this.$store.state.overlay.quickFind.selectedScene;
         this.$buefy.toast.open({ message: `The scene was unlinked and will not be relinked to any scene`, type: 'is-primary', duration: 3000 });
       }
     },    
@@ -1236,6 +1551,79 @@ watch:{
 
 .video-js {
   margin: 0 auto;
+}
+
+.scene-details-inline,
+.scene-details-page {
+  position: relative;
+  background: #fff;
+  padding: 1rem;
+}
+
+.scene-details-page {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.scene-details-inline {
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.16);
+}
+
+.scene-details-inline .modal-card,
+.scene-details-page .modal-card {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+.scene-details-page .modal-card {
+  display: block;
+  max-height: none;
+  overflow: visible;
+  height: auto;
+}
+
+.scene-details-inline .modal-card-body,
+.scene-details-page .modal-card-body {
+  padding: 1rem;
+}
+
+.scene-details-page .modal-card-body {
+  display: block;
+  overflow: visible;
+  max-height: none;
+  height: auto;
+  flex: none;
+}
+
+.scene-details-inline-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 2;
+}
+
+.scene-details-page-back {
+  margin: 0 0 1rem 0;
+}
+
+.scene-details-page-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.scene-details-page-media {
+  width: 100%;
+}
+
+.scene-details-page-info {
+  display: block;
+  width: 100%;
+  padding-top: 0;
+  border-top: 1px solid #e5e5e5;
+  padding-top: 1rem;
 }
 
 :deep(.video-js .vjs-big-play-button) {
@@ -1271,6 +1659,11 @@ watch:{
   scrollbar-width: none;
 }
 
+.scene-details-page .block-tags {
+  max-height: none;
+  overflow: visible;
+}
+
 .block-tags::-webkit-scrollbar {
   display: none;
 }
@@ -1288,6 +1681,12 @@ watch:{
   bottom: 5px;
   font-size: 11px;
   color: var(--text-muted);
+}
+
+.scene-details-page .scene-id {
+  position: static;
+  margin-top: 1rem;
+  text-align: right;
 }
 
 .prev, .next {

@@ -45,6 +45,31 @@
         >
       </p>
       <hr />
+      <p><strong>Generate funscripts with PythonDancer</strong></p>
+      <p>
+        Generate `.funscript` files beside all videos that do not already have one.
+        The task uses `automap`, writes a heatmap, retries with convert only if needed,
+        and links the generated funscript back to the matched video scene.
+      </p>
+      <b-field label="Concurrency">
+        <b-input v-model.number="pythonDancerConcurrency" type="number" min="1" max="4"></b-input>
+      </b-field>
+      <b-field label="Path prefix">
+        <b-input v-model="pythonDancerPathPrefix" placeholder="/mnt/g/Videos"></b-input>
+      </b-field>
+      <b-field label="Volume ID (optional)">
+        <b-input v-model.number="pythonDancerVolumeId" type="number" min="0" placeholder="0"></b-input>
+      </b-field>
+      <p>
+        <b-button
+          type="is-primary"
+          @click="runPythonDancerTask"
+          icon-left="play"
+        >
+          Run PythonDancer task
+        </b-button>
+      </p>
+      <hr />
       <b-field>
         <b-switch v-model="scrapeFunscripts" type="is-default">
           <strong>Scrape for Available Funscripts</strong>
@@ -62,6 +87,13 @@ import ky from "ky";
 
 export default {
   name: "Funscripts",
+  data () {
+    return {
+      pythonDancerConcurrency: 1,
+      pythonDancerPathPrefix: '/mnt/g/Videos',
+      pythonDancerVolumeId: 0
+    }
+  },
   mounted() {
     this.$store.dispatch("optionsFunscripts/load");
   },
@@ -79,6 +111,28 @@ export default {
     save () {
       this.$store.dispatch('optionsFunscripts/save')
     },
+    async runPythonDancerTask () {
+      const searchParams = {
+        concurrency: String(this.pythonDancerConcurrency || 1),
+        path_prefix: this.pythonDancerPathPrefix || ''
+      }
+      if (this.pythonDancerVolumeId && this.pythonDancerVolumeId > 0) {
+        searchParams.volume_id = String(this.pythonDancerVolumeId)
+      }
+
+      try {
+        await ky.get('/api/task/funscript/python-dancer', { searchParams })
+        this.$buefy.toast.open({
+          message: 'PythonDancer funscript task started.',
+          type: 'is-success'
+        })
+      } catch (e) {
+        this.$buefy.toast.open({
+          message: 'Failed to start PythonDancer funscript task.',
+          type: 'is-danger'
+        })
+      }
+    }
   },
   computed: {
     countTotal: function () {

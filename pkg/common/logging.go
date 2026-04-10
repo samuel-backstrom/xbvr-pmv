@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"os"
+	"sync/atomic"
+	"time"
 
 	"github.com/gammazero/nexus/v3/client"
 	"github.com/shiena/ansicolor"
@@ -12,6 +14,7 @@ import (
 )
 
 var Log = *logrus.New()
+var taskRunSeq uint64
 
 type WampHook struct {
 	publisher *client.Client
@@ -54,7 +57,10 @@ func InitLogging() {
 	}
 
 	Log.Formatter = &prefixed.TextFormatter{
-		ForceColors: true,
+		ForceColors:     true,
+		ForceFormatting: true,
+		FullTimestamp:   true,
+		TimestampFormat: time.RFC3339,
 	}
 
 	//	create / open log file in AppDir folder
@@ -66,4 +72,48 @@ func InitLogging() {
 	} else {
 		Log.Info("Failed to log to file, using default stderr")
 	}
+}
+
+func WithTaskLog(task string, fields logrus.Fields) *logrus.Entry {
+	taskFields := logrus.Fields{
+		"task": task,
+	}
+	for key, value := range fields {
+		taskFields[key] = value
+	}
+	return Log.WithFields(taskFields)
+}
+
+func StartAsyncTask(task string, trigger string, fields logrus.Fields, fn func()) uint64 {
+	runID := atomic.AddUint64(&taskRunSeq, 1)
+	taskFields := logrus.Fields{
+		"trigger": trigger,
+		"run_id":  runID,
+	}
+	for key, value := range fields {
+		taskFields[key] = value
+	}
+
+	entry := WithTaskLog(task, taskFields)
+	entry.Info("queued")
+
+	go func() {
+		started := time.Now()
+		entry.Info("started")
+		defer func() {
+			duration := time.Since(started).Round(time.Millisecond)
+			if recovered := recover(); recovered != nil {
+				entry.WithFields(logrus.Fields{
+					"duration": duration.String(),
+					"panic":    recovered,
+				}).Error("panicked")
+				panic(recovered)
+			}
+			entry.WithField("duration", duration.String()).Info("finished")
+		}()
+
+		fn()
+	}()
+
+	return runID
 }

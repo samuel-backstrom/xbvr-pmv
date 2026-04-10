@@ -16,8 +16,11 @@ import (
 	"github.com/go-test/deep"
 	"github.com/jinzhu/gorm"
 	"github.com/mozillazg/go-slugify"
+	"github.com/sirupsen/logrus"
 
+	"github.com/xbapps/xbvr/pkg/config"
 	"github.com/xbapps/xbvr/pkg/models"
+	"github.com/xbapps/xbvr/pkg/scrape"
 	"github.com/xbapps/xbvr/pkg/tasks"
 )
 
@@ -43,13 +46,28 @@ type RequestSelectScript struct {
 }
 
 type RequestCustomScene struct {
-	SceneTitle string `json:"title"`
-	SceneID    string `json:"id"`
-	Filename   string `json:"filename"`
+	SceneTitle  string `json:"title"`
+	SceneID     string `json:"id"`
+	Filename    string `json:"filename"`
+	PMVHavenURL string `json:"pmvhaven_url"`
 }
 
 type RequestDeleteScene struct {
 	SceneID uint `json:"scene_id"`
+}
+
+type RequestHandyTransfer struct {
+	FileID      uint `json:"file_id"`
+	StartTimeMs int  `json:"start_time_ms"`
+	Play        bool `json:"play"`
+}
+
+type ResponseHandyTransfer struct {
+	SceneID     uint   `json:"scene_id"`
+	FileID      uint   `json:"file_id"`
+	ScriptName  string `json:"script_name"`
+	UploadedURL string `json:"uploaded_url"`
+	Played      bool   `json:"played"`
 }
 
 type RequestEditSceneDetails struct {
@@ -58,6 +76,7 @@ type RequestEditSceneDetails struct {
 	Studio       string   `json:"studio"`
 	Site         string   `json:"site"`
 	SceneURL     string   `json:"scene_url"`
+	PMVHavenURL  string   `json:"pmvhaven_url"`
 	ReleaseDate  string   `json:"release_date_text"`
 	Cast         []string `json:"castArray"`
 	Tags         []string `json:"tagsArray"`
@@ -71,6 +90,12 @@ type RequestEditSceneDetails struct {
 type ResponseGetScenes struct {
 	Results int            `json:"results"`
 	Scenes  []models.Scene `json:"scenes"`
+}
+
+type editableSceneImage struct {
+	URL         string `json:"url"`
+	Type        string `json:"type,omitempty"`
+	Orientation string `json:"orientation,omitempty"`
 }
 
 type ResponseGetFilters struct {
@@ -134,6 +159,10 @@ func (i SceneResource) WebService() *restful.WebService {
 		Metadata(restfulspec.KeyOpenAPITags, tags).
 		Writes(models.Scene{}))
 
+	ws.Route(ws.POST("/{scene-id}/handy/transfer").To(i.transferHandyScript).
+		Metadata(restfulspec.KeyOpenAPITags, tags).
+		Writes(ResponseHandyTransfer{}))
+
 	ws.Route(ws.DELETE("/{scene-id}/cuepoint/{cuepoint-id}").To(i.deleteSceneCuepoint).
 		Metadata(restfulspec.KeyOpenAPITags, tags).
 		Writes(models.Scene{}))
@@ -193,10 +222,34 @@ func (i SceneResource) createCustomScene(req *restful.Request, resp *restful.Res
 	scene.Studio = "Custom"
 	scene.Site = "CustomVR"
 	scene.HomepageURL = "http://localhost/" + scene.SceneID
-	scene.Covers = append(scene.Covers, "http://localhost/dont_cause_errors")
 	scene.Released = currentTime.Format("2006-01-02")
 	if r.Filename != "" {
 		scene.Filenames = append(scene.Filenames, r.Filename)
+	}
+
+	if pmvURL := strings.TrimSpace(r.PMVHavenURL); pmvURL != "" {
+		scene.HomepageURL = pmvURL
+		enriched, enrichErr := scrape.EnrichPMVHavenCandidateThumbnail(scrape.PMVHavenCandidate{SceneURL: pmvURL})
+		if enrichErr != nil {
+			log.Warnf("Unable to enrich PMVHaven metadata for custom scene %q: %v", scene.SceneID, enrichErr)
+		} else {
+			if enriched.SceneURL != "" {
+				scene.HomepageURL = enriched.SceneURL
+			}
+			if strings.TrimSpace(enriched.ThumbnailURL) != "" {
+				scene.Covers = append(scene.Covers, strings.TrimSpace(enriched.ThumbnailURL))
+			}
+			if strings.TrimSpace(scene.Title) == "" && strings.TrimSpace(enriched.Title) != "" {
+				scene.Title = strings.TrimSpace(enriched.Title)
+			}
+			if strings.TrimSpace(enriched.Description) != "" {
+				scene.Synopsis = strings.TrimSpace(enriched.Description)
+			}
+		}
+	}
+
+	if len(scene.Covers) == 0 {
+		scene.Covers = append(scene.Covers, "http://localhost/dont_cause_errors")
 	}
 
 	log.Infof("Creating custom scene: \"%v\" \"%v\"", scene.SceneID, scene.Title)
@@ -488,6 +541,109 @@ func (i SceneResource) getScene(req *restful.Request, resp *restful.Response) {
 	db.Close()
 
 	resp.WriteHeaderAndEntity(http.StatusOK, scene)
+}
+
+func (i SceneResource) transferHandyScript(req *restful.Request, resp *restful.Response) {
+	sceneID, err := strconv.Atoi(req.PathParameter("scene-id"))
+	if err != nil {
+		resp.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	var r RequestHandyTransfer
+	if err := req.ReadEntity(&r); err != nil {
+		log.WithError(err).Warn("failed to read Handy transfer request")
+		resp.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if r.FileID == 0 {
+		resp.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	db, _ := models.GetDB()
+	defer db.Close()
+
+	var scene models.Scene
+	if err := db.First(&scene, uint(sceneID)).Error; err != nil {
+		log.WithError(err).Warn("failed to load scene for Handy transfer")
+		resp.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	var scriptFile models.File
+	if err := db.Preload("Volume").First(&scriptFile, r.FileID).Error; err != nil {
+		log.WithError(err).Warn("failed to load script file for Handy transfer")
+		resp.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if scriptFile.SceneID != scene.ID || scriptFile.Type != "script" {
+		resp.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if !config.Config.Interfaces.Handy.Enabled || config.Config.Interfaces.Handy.ConnectionKey == "" {
+		resp.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if connected, err := handyConnected(config.Config.Interfaces.Handy.ConnectionKey); err != nil {
+		log.WithError(err).Warn("Handy connected check failed before manual transfer")
+		resp.WriteHeader(http.StatusBadGateway)
+		return
+	} else if !connected {
+		resp.WriteHeader(http.StatusConflict)
+		return
+	}
+
+	scriptData, err := readHandyFileData(scriptFile)
+	if err != nil {
+		log.WithError(err).Warn("failed to read script for Handy transfer")
+		resp.WriteHeader(http.StatusBadGateway)
+		return
+	}
+
+	if err := handySetOffset(config.Config.Interfaces.Handy.ConnectionKey, config.Config.Interfaces.Handy.LatencyMs); err != nil {
+		log.WithError(err).Warn("failed to set Handy offset before transfer")
+	}
+
+	uploadedURL, err := uploadHandyScriptData(scriptData, scriptFile.Filename)
+	if err != nil {
+		log.WithError(err).Warn("failed to upload script to Handy script API")
+		resp.WriteHeader(http.StatusBadGateway)
+		return
+	}
+
+	if err := handySetupScript(config.Config.Interfaces.Handy.ConnectionKey, uploadedURL); err != nil {
+		log.WithError(err).Warn("failed to setup Handy script")
+		resp.WriteHeader(http.StatusBadGateway)
+		return
+	}
+
+	played := false
+	if r.Play {
+		if err := handyPlayScript(config.Config.Interfaces.Handy.ConnectionKey, r.StartTimeMs); err != nil {
+			log.WithError(err).Warn("failed to start Handy playback after script transfer")
+		} else {
+			played = true
+		}
+	}
+
+	log.WithFields(logrus.Fields{
+		"scene_id":    scene.ID,
+		"file_id":     scriptFile.ID,
+		"played":      played,
+		"script_name": scriptFile.Filename,
+	}).Info("Transferred script to Handy")
+
+	resp.WriteHeaderAndEntity(http.StatusOK, ResponseHandyTransfer{
+		SceneID:     scene.ID,
+		FileID:      scriptFile.ID,
+		ScriptName:  scriptFile.Filename,
+		UploadedURL: uploadedURL,
+		Played:      played,
+	})
 }
 
 func (i SceneResource) getScenes(req *restful.Request, resp *restful.Response) {
@@ -857,6 +1013,7 @@ func (i SceneResource) editScene(req *restful.Request, resp *restful.Response) {
 		log.Error(err)
 		return
 	}
+	enrichEditSceneFromPMVHaven(&r)
 
 	var scene models.Scene
 	db, _ := models.GetDB()
@@ -941,6 +1098,71 @@ func (i SceneResource) editScene(req *restful.Request, resp *restful.Response) {
 
 		resp.WriteHeaderAndEntity(http.StatusOK, scene)
 	}
+}
+
+func enrichEditSceneFromPMVHaven(r *RequestEditSceneDetails) {
+	pmvURL := strings.TrimSpace(r.PMVHavenURL)
+	if pmvURL == "" {
+		return
+	}
+
+	enriched, err := scrape.EnrichPMVHavenCandidateThumbnail(scrape.PMVHavenCandidate{SceneURL: pmvURL})
+	if err != nil {
+		log.Warnf("Unable to enrich PMVHaven metadata during scene edit for url %q: %v", pmvURL, err)
+		return
+	}
+
+	if strings.TrimSpace(enriched.SceneURL) != "" {
+		r.SceneURL = strings.TrimSpace(enriched.SceneURL)
+	} else {
+		r.SceneURL = pmvURL
+	}
+	if strings.TrimSpace(enriched.Title) != "" {
+		r.Title = strings.TrimSpace(enriched.Title)
+	}
+	if strings.TrimSpace(enriched.Description) != "" {
+		r.Synopsis = strings.TrimSpace(enriched.Description)
+	}
+
+	thumbURL := strings.TrimSpace(enriched.ThumbnailURL)
+	if thumbURL == "" {
+		return
+	}
+	r.CoverURL = thumbURL
+
+	images := make([]editableSceneImage, 0)
+	if strings.TrimSpace(r.Images) != "" {
+		if err := json.Unmarshal([]byte(r.Images), &images); err != nil {
+			log.Warnf("Unable to parse current scene images during PMVHaven enrichment: %v", err)
+			images = make([]editableSceneImage, 0)
+		}
+	}
+
+	coverOrientation := ""
+	for _, image := range images {
+		if strings.TrimSpace(image.URL) == thumbURL {
+			coverOrientation = strings.TrimSpace(image.Orientation)
+			break
+		}
+		if coverOrientation == "" && image.Type == "cover" && strings.TrimSpace(image.Orientation) != "" {
+			coverOrientation = strings.TrimSpace(image.Orientation)
+		}
+	}
+
+	// Manual PMVHaven URL overrides should pin scene imagery to the linked
+	// video thumbnail only.
+	resultImages := []editableSceneImage{{
+		URL:         thumbURL,
+		Type:        "cover",
+		Orientation: coverOrientation,
+	}}
+
+	imagesJSON, err := json.Marshal(resultImages)
+	if err != nil {
+		log.Warnf("Unable to serialize scene images during PMVHaven enrichment: %v", err)
+		return
+	}
+	r.Images = string(imagesJSON)
 }
 
 func getTagDifferences(arr1, arr2 []models.Tag) []string {

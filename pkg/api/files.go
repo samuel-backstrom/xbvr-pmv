@@ -54,6 +54,12 @@ func (i FilesResource) WebService() *restful.WebService {
 	ws.Route(ws.POST("/match").To(i.matchFile).
 		Metadata(restfulspec.KeyOpenAPITags, tags))
 
+	ws.Route(ws.POST("/attach-script").To(i.attachFunscript).
+		Metadata(restfulspec.KeyOpenAPITags, tags))
+
+	ws.Route(ws.POST("/generate-thumbnail").To(i.generateThumbnail).
+		Metadata(restfulspec.KeyOpenAPITags, tags))
+
 	ws.Route(ws.POST("/unmatch").To(i.unmatchFile).
 		Metadata(restfulspec.KeyOpenAPITags, tags))
 

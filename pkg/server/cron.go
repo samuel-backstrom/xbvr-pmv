@@ -5,7 +5,9 @@ import (
 	"time"
 
 	"github.com/robfig/cron/v3"
+	"github.com/sirupsen/logrus"
 	"github.com/xbapps/xbvr/pkg/api"
+	"github.com/xbapps/xbvr/pkg/common"
 	"github.com/xbapps/xbvr/pkg/config"
 	"github.com/xbapps/xbvr/pkg/session"
 	"github.com/xbapps/xbvr/pkg/tasks"
@@ -20,38 +22,87 @@ var stashdbScrapeTask cron.EntryID
 var linkScenesTask cron.EntryID
 var pmvMatchTask cron.EntryID
 
+func cronTaskLog(task string, fields logrus.Fields) *logrus.Entry {
+	base := logrus.Fields{
+		"task":    task,
+		"trigger": "cron",
+	}
+	for key, value := range fields {
+		base[key] = value
+	}
+	return log.WithFields(base)
+}
+
+func logCronSchedule(task string, schedule string) {
+	cronTaskLog(task, logrus.Fields{"schedule": schedule}).Info("scheduled")
+}
+
+func logNextCronRun(task string, entryID cron.EntryID) {
+	if entryID == 0 {
+		cronTaskLog(task, nil).Debug("no cron entry configured")
+		return
+	}
+	nextRun := cronInstance.Entry(entryID).Next
+	if nextRun.IsZero() {
+		cronTaskLog(task, nil).Info("next_run unavailable")
+		return
+	}
+	cronTaskLog(task, logrus.Fields{"next_run": nextRun.Format(time.RFC3339)}).Info("next_run")
+}
+
+func runCronTask(task string, entryID cron.EntryID, fn func()) {
+	tlog := cronTaskLog(task, nil)
+	if session.HasActiveSession() {
+		tlog.Info("skipped active_session=true")
+		logNextCronRun(task, entryID)
+		return
+	}
+
+	started := time.Now()
+	tlog.Info("started")
+	fn()
+	tlog.WithField("duration", time.Since(started).Round(time.Millisecond).String()).Info("finished")
+	logNextCronRun(task, entryID)
+}
+
 func SetupCron() {
 	cronInstance = cron.New()
 	cronInstance.AddFunc("@every 2s", session.CheckForDeadSession)
 	cronInstance.AddFunc("@every 6h", tasks.CalculateCacheSizes)
 	if config.Config.Cron.RescrapeSchedule.Enabled {
-		log.Println(fmt.Sprintf("Setup Rescrape Task %v", formatCronSchedule(config.CronSchedule(config.Config.Cron.RescrapeSchedule))))
-		rescrapTask, _ = cronInstance.AddFunc(formatCronSchedule(config.CronSchedule(config.Config.Cron.RescrapeSchedule)), scrapeCron)
+		schedule := formatCronSchedule(config.CronSchedule(config.Config.Cron.RescrapeSchedule))
+		logCronSchedule("rescrape", schedule)
+		rescrapTask, _ = cronInstance.AddFunc(schedule, scrapeCron)
 	}
 	if config.Config.Cron.RescanSchedule.Enabled {
-		log.Println(fmt.Sprintf("Setup Rescan Task %v", formatCronSchedule(config.CronSchedule(config.Config.Cron.RescanSchedule))))
-		rescanTask, _ = cronInstance.AddFunc(formatCronSchedule(config.CronSchedule(config.Config.Cron.RescanSchedule)), rescanCron)
+		schedule := formatCronSchedule(config.CronSchedule(config.Config.Cron.RescanSchedule))
+		logCronSchedule("rescan", schedule)
+		rescanTask, _ = cronInstance.AddFunc(schedule, rescanCron)
 	}
 	if config.Config.Cron.PreviewSchedule.Enabled {
-		log.Println(fmt.Sprintf("Setup Preview Generation Task %v", formatCronSchedule(config.CronSchedule(config.Config.Cron.PreviewSchedule))))
-		ps := formatCronSchedule(config.CronSchedule(config.Config.Cron.PreviewSchedule))
-		previewTask, _ = cronInstance.AddFunc(ps, generatePreviewCron)
+		schedule := formatCronSchedule(config.CronSchedule(config.Config.Cron.PreviewSchedule))
+		logCronSchedule("preview-generate", schedule)
+		previewTask, _ = cronInstance.AddFunc(schedule, generatePreviewCron)
 	}
 	if config.Config.Cron.ActorRescrapeSchedule.Enabled {
-		log.Println(fmt.Sprintf("Setup Actor Rescrape Task %v", formatCronSchedule(config.CronSchedule(config.Config.Cron.ActorRescrapeSchedule))))
-		actorScrapeTask, _ = cronInstance.AddFunc(formatCronSchedule(config.CronSchedule(config.Config.Cron.ActorRescrapeSchedule)), actorRescrapeCron)
+		schedule := formatCronSchedule(config.CronSchedule(config.Config.Cron.ActorRescrapeSchedule))
+		logCronSchedule("actor-rescrape", schedule)
+		actorScrapeTask, _ = cronInstance.AddFunc(schedule, actorRescrapeCron)
 	}
 	if config.Config.Cron.StashdbRescrapeSchedule.Enabled {
-		log.Println(fmt.Sprintf("Setup Stashdb Rescrape Task %v", formatCronSchedule(config.CronSchedule(config.Config.Cron.StashdbRescrapeSchedule))))
-		stashdbScrapeTask, _ = cronInstance.AddFunc(formatCronSchedule(config.CronSchedule(config.Config.Cron.StashdbRescrapeSchedule)), stashdbRescrapeCron)
+		schedule := formatCronSchedule(config.CronSchedule(config.Config.Cron.StashdbRescrapeSchedule))
+		logCronSchedule("stashdb-rescrape", schedule)
+		stashdbScrapeTask, _ = cronInstance.AddFunc(schedule, stashdbRescrapeCron)
 	}
 	if config.Config.Cron.LinkScenesSchedule.Enabled {
-		log.Println(fmt.Sprintf("Setup Link Scenes Task %v", formatCronSchedule(config.CronSchedule(config.Config.Cron.LinkScenesSchedule))))
-		linkScenesTask, _ = cronInstance.AddFunc(formatCronSchedule(config.CronSchedule(config.Config.Cron.LinkScenesSchedule)), linkScenesCron)
+		schedule := formatCronSchedule(config.CronSchedule(config.Config.Cron.LinkScenesSchedule))
+		logCronSchedule("link-scenes", schedule)
+		linkScenesTask, _ = cronInstance.AddFunc(schedule, linkScenesCron)
 	}
 	if config.Config.Cron.PmvMatchSchedule.Enabled {
-		log.Println(fmt.Sprintf("Setup PMV Match Task %v", formatCronSchedule(config.CronSchedule(config.Config.Cron.PmvMatchSchedule))))
-		pmvMatchTask, _ = cronInstance.AddFunc(formatCronSchedule(config.CronSchedule(config.Config.Cron.PmvMatchSchedule)), pmvMatchCron)
+		schedule := formatCronSchedule(config.CronSchedule(config.Config.Cron.PmvMatchSchedule))
+		logCronSchedule("pmv-match-unmatched", schedule)
+		pmvMatchTask, _ = cronInstance.AddFunc(schedule, pmvMatchCron)
 	}
 	cronInstance.Start()
 
@@ -79,76 +130,94 @@ func SetupCron() {
 		time.AfterFunc(time.Duration(config.Config.Cron.PmvMatchSchedule.RunAtStartDelay)*time.Minute, pmvMatchCron)
 	}
 
-	log.Println(fmt.Sprintf("Next Rescrape Task at %v", cronInstance.Entry(rescrapTask).Next))
-	log.Println(fmt.Sprintf("Next Rescan Task at %v", cronInstance.Entry(rescanTask).Next))
-	log.Println(fmt.Sprintf("Next Preview Generation Task at %v", cronInstance.Entry(previewTask).Next))
-	log.Println(fmt.Sprintf("Next Actor Rescripe Task at %v", cronInstance.Entry(actorScrapeTask).Next))
-	log.Println(fmt.Sprintf("Next Stashdb Rescrape Task at %v", cronInstance.Entry(stashdbScrapeTask).Next))
-	log.Println(fmt.Sprintf("Next Link Scenes Task at %v", cronInstance.Entry(linkScenesTask).Next))
-	log.Println(fmt.Sprintf("Next PMV Match Task at %v", cronInstance.Entry(pmvMatchTask).Next))
+	logNextCronRun("rescrape", rescrapTask)
+	logNextCronRun("rescan", rescanTask)
+	logNextCronRun("preview-generate", previewTask)
+	logNextCronRun("actor-rescrape", actorScrapeTask)
+	logNextCronRun("stashdb-rescrape", stashdbScrapeTask)
+	logNextCronRun("link-scenes", linkScenesTask)
+	logNextCronRun("pmv-match-unmatched", pmvMatchTask)
 }
 
 func scrapeCron() {
-	if !session.HasActiveSession() {
+	runCronTask("rescrape", rescrapTask, func() {
 		tasks.Scrape("_enabled", "", "")
-	}
-	log.Println(fmt.Sprintf("Next Rescrape Task at %v", cronInstance.Entry(rescrapTask).Next))
+	})
 }
 
 func rescanCron() {
-	if !session.HasActiveSession() {
+	runCronTask("rescan", rescanTask, func() {
 		tasks.RescanVolumes(-1)
-	}
-	log.Println(fmt.Sprintf("Next Rescan Task at %v", cronInstance.Entry(rescanTask).Next))
+	})
 }
 func actorRescrapeCron() {
-	if !session.HasActiveSession() {
+	runCronTask("actor-rescrape", actorScrapeTask, func() {
 		tasks.ScrapeActors()
-	}
-	log.Println(fmt.Sprintf("Next Rescrape Task at %v", cronInstance.Entry(rescrapTask).Next))
+	})
 }
 func stashdbRescrapeCron() {
-	if !session.HasActiveSession() {
+	runCronTask("stashdb-rescrape", stashdbScrapeTask, func() {
 		api.StashdbRunAll()
-	}
-	log.Println(fmt.Sprintf("Next Stashdb Rescrape Task at %v", cronInstance.Entry(rescrapTask).Next))
+	})
 }
 
 func linkScenesCron() {
-	if !session.HasActiveSession() {
+	runCronTask("link-scenes", linkScenesTask, func() {
 		tasks.MatchAlternateSources()
-	}
-	log.Println(fmt.Sprintf("Next Link Scenes Task at %v", cronInstance.Entry(rescrapTask).Next))
+	})
 }
 
 func pmvMatchCron() {
-	if !session.HasActiveSession() {
-		go tasks.RunPMVMatchUnmatchedTask(tasks.PMVMatchBatchRequest{
+	if session.HasActiveSession() {
+		cronTaskLog("pmv-match-unmatched", nil).Info("skipped active_session=true")
+		logNextCronRun("pmv-match-unmatched", pmvMatchTask)
+		return
+	}
+
+	common.StartAsyncTask("pmv-match-unmatched", "cron", logrus.Fields{
+		"limit": 200,
+	}, func() {
+		tasks.RunPMVMatchUnmatchedTask(tasks.PMVMatchBatchRequest{
 			DryRun: false,
 			Limit:  200,
 		})
-	}
-	log.Println(fmt.Sprintf("Next PMV Match Task at %v", cronInstance.Entry(pmvMatchTask).Next))
+	})
+	logNextCronRun("pmv-match-unmatched", pmvMatchTask)
 }
 
 var previewGenerateInProgress = false
 
 func generatePreviewCron() {
-	if !session.HasActiveSession() || !previewGenerateInProgress {
-		previewGenerateInProgress = true
-		defer func() {
-			previewGenerateInProgress = false
-		}()
-
-		if !config.Config.Cron.PreviewSchedule.UseRange {
-			tasks.GeneratePreviews(nil)
-		} else {
-			endTime := calcEndTime(config.Config.Cron.PreviewSchedule.HourStart, config.Config.Cron.PreviewSchedule.HourEnd, config.Config.Cron.PreviewSchedule.MinuteStart)
-			log.Infof("Preview Generation will stop at %v", endTime)
-			tasks.GeneratePreviews(&endTime)
-		}
+	if session.HasActiveSession() {
+		cronTaskLog("preview-generate", nil).Info("skipped active_session=true")
+		logNextCronRun("preview-generate", previewTask)
+		return
 	}
-	log.Println(fmt.Sprintf("Next Preview Generation Task at %v", cronInstance.Entry(previewTask).Next))
+	if previewGenerateInProgress {
+		cronTaskLog("preview-generate", nil).Info("skipped already_running=true")
+		logNextCronRun("preview-generate", previewTask)
+		return
+	}
+
+	previewGenerateInProgress = true
+	defer func() {
+		previewGenerateInProgress = false
+	}()
+
+	started := time.Now()
+	tlog := cronTaskLog("preview-generate", nil)
+	tlog.Info("started")
+
+	if !config.Config.Cron.PreviewSchedule.UseRange {
+		tasks.GeneratePreviews(nil)
+	} else {
+		endTime := calcEndTime(config.Config.Cron.PreviewSchedule.HourStart, config.Config.Cron.PreviewSchedule.HourEnd, config.Config.Cron.PreviewSchedule.MinuteStart)
+		tlog.WithField("end_time", endTime.Format(time.RFC3339)).Info("using stop window")
+		tasks.GeneratePreviews(&endTime)
+	}
+
+	tlog.WithField("duration", time.Since(started).Round(time.Millisecond).String()).Info("finished")
+	logNextCronRun("preview-generate", previewTask)
 }
 func formatCronSchedule(schedule config.CronSchedule) string {
 	// 	this routine will format a crontab range description, https://crontab.guru is a good tool to decode the range description generated

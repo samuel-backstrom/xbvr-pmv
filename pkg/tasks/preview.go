@@ -15,51 +15,86 @@ import (
 )
 
 func GeneratePreviews(endTime *time.Time) {
-	if !models.CheckLock("previews") {
-		models.CreateLock("previews")
-		defer models.RemoveLock("previews")
-		log.Infof("Generating previews")
-		db, _ := models.GetDB()
-		defer db.Close()
+	tlog := log.WithField("task", "preview-generate")
+	if models.CheckLock("previews") {
+		tlog.Info("skipped: task already running")
+		return
+	}
 
-		var scenes []models.Scene
-		db.Model(&models.Scene{}).Where("is_available = ?", true).Where("has_video_preview = ?", false).Order("release_date desc").Find(&scenes)
+	models.CreateLock("previews")
+	defer models.RemoveLock("previews")
 
-		for _, scene := range scenes {
-			files, _ := scene.GetFiles()
-			if len(files) > 0 {
-				if endTime != nil && time.Now().After(*endTime) {
-					return
-				}
-				i := 0
-				for i < len(files) && files[i].Exists() {
-					if files[i].Type == "video" {
-						log.Infof("Rendering %v", scene.SceneID)
-						destFile := filepath.Join(common.VideoPreviewDir, scene.SceneID+".mp4")
-						err := RenderPreview(
-							files[i].GetPath(),
-							destFile,
-							files[i].VideoProjection,
-							config.Config.Library.Preview.StartTime,
-							config.Config.Library.Preview.SnippetLength,
-							config.Config.Library.Preview.SnippetAmount,
-							config.Config.Library.Preview.Resolution,
-							config.Config.Library.Preview.ExtraSnippet,
-						)
-						if err == nil {
-							scene.HasVideoPreview = true
-							scene.Save()
-							break
-						} else {
-							log.Warn(err)
-						}
-					}
-					i++
-				}
+	started := time.Now()
+	rendered := 0
+	failed := 0
+	skipped := 0
+	stoppedByEndTime := false
+
+	db, _ := models.GetDB()
+	defer db.Close()
+
+	var scenes []models.Scene
+	db.Model(&models.Scene{}).
+		Where("is_available = ?", true).
+		Where("has_video_preview = ?", false).
+		Order("release_date desc").
+		Find(&scenes)
+
+	fields := common.Log.WithField("task", "preview-generate")
+	if endTime != nil {
+		fields = fields.WithField("end_time", endTime.Format(time.RFC3339))
+	}
+	fields.WithField("scenes", len(scenes)).Info("started")
+
+	for idx, scene := range scenes {
+		if endTime != nil && time.Now().After(*endTime) {
+			stoppedByEndTime = true
+			break
+		}
+
+		files, _ := scene.GetFiles()
+		if len(files) == 0 {
+			skipped++
+			continue
+		}
+
+		renderedScene := false
+		for i := 0; i < len(files) && files[i].Exists(); i++ {
+			if files[i].Type != "video" {
+				continue
 			}
+
+			tlog.Infof("rendering scene_id=%s progress=%d/%d file=%q", scene.SceneID, idx+1, len(scenes), files[i].Filename)
+			destFile := filepath.Join(common.VideoPreviewDir, scene.SceneID+".mp4")
+			err := RenderPreview(
+				files[i].GetPath(),
+				destFile,
+				files[i].VideoProjection,
+				config.Config.Library.Preview.StartTime,
+				config.Config.Library.Preview.SnippetLength,
+				config.Config.Library.Preview.SnippetAmount,
+				config.Config.Library.Preview.Resolution,
+				config.Config.Library.Preview.ExtraSnippet,
+			)
+			if err == nil {
+				scene.HasVideoPreview = true
+				scene.Save()
+				rendered++
+				renderedScene = true
+				break
+			}
+
+			failed++
+			tlog.WithError(err).Warnf("render failed scene_id=%s file=%q", scene.SceneID, files[i].Filename)
+		}
+
+		if !renderedScene {
+			skipped++
 		}
 	}
-	log.Infof("Previews generated")
+
+	tlog.Infof("finished scenes=%d rendered=%d skipped=%d failures=%d stopped_early=%v duration=%s",
+		len(scenes), rendered, skipped, failed, stoppedByEndTime, time.Since(started).Round(time.Millisecond))
 }
 
 func RenderPreview(inputFile string, destFile string, videoProjection string, startTime int, snippetLength float64, snippetAmount int, resolution int, extraSnippet bool) error {

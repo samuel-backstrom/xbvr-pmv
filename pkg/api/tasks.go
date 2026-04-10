@@ -8,6 +8,8 @@ import (
 
 	restfulspec "github.com/emicklei/go-restful-openapi/v2"
 	"github.com/emicklei/go-restful/v3"
+	"github.com/sirupsen/logrus"
+	"github.com/xbapps/xbvr/pkg/common"
 	"github.com/xbapps/xbvr/pkg/models"
 	"github.com/xbapps/xbvr/pkg/tasks"
 )
@@ -20,6 +22,16 @@ type RequestScrapeJAVR struct {
 type RequestScrapeTPDB struct {
 	ApiToken string `json:"apiToken"`
 	SceneUrl string `json:"sceneUrl"`
+}
+
+type RequestPythonDancerBatch struct {
+	Limit           int    `json:"limit"`
+	Concurrency     int    `json:"concurrency"`
+	VolumeID        uint   `json:"volume_id"`
+	PathPrefix      string `json:"path_prefix"`
+	FileID          uint   `json:"file_id"`
+	ForceRegenerate bool   `json:"force_regenerate"`
+	PostProcessMode string `json:"post_process_mode"`
 }
 
 type RequestSingleScrape struct {
@@ -43,11 +55,25 @@ type RequestPMVMatch struct {
 }
 
 type RequestPMVMatchBatch struct {
-	DryRun      bool   `json:"dry_run"`
+	DryRun            bool   `json:"dry_run"`
+	Limit             int    `json:"limit"`
+	Concurrency       int    `json:"concurrency"`
+	VolumeID          uint   `json:"volume_id"`
+	PathPrefix        string `json:"path_prefix"`
+	RefreshExisting   bool   `json:"refresh_existing"`
+	UpdateTitle       bool   `json:"update_title"`
+	UpdateStudio      bool   `json:"update_studio"`
+	UpdateSceneURL    bool   `json:"update_scene_url"`
+	UpdateThumbnail   bool   `json:"update_thumbnail"`
+	UpdateDescription bool   `json:"update_description"`
+}
+
+type RequestPMVImport struct {
+	URL         string `json:"url"`
+	ListURL     string `json:"list_url"`
+	PathPrefix  string `json:"path_prefix"`
 	Limit       int    `json:"limit"`
 	Concurrency int    `json:"concurrency"`
-	VolumeID    uint   `json:"volume_id"`
-	PathPrefix  string `json:"path_prefix"`
 }
 
 type ResponseBackupBundle struct {
@@ -60,6 +86,22 @@ type ResponseSceneScrape struct {
 }
 
 type TaskResource struct{}
+
+func taskRequestFields(req *restful.Request, fields logrus.Fields) logrus.Fields {
+	out := logrus.Fields{
+		"endpoint": req.Request.URL.Path,
+		"method":   req.Request.Method,
+	}
+	for key, value := range fields {
+		out[key] = value
+	}
+	return out
+}
+
+func startAPITask(req *restful.Request, resp *restful.Response, task string, fields logrus.Fields, fn func()) {
+	common.StartAsyncTask(task, "api", taskRequestFields(req, fields), fn)
+	resp.WriteHeader(http.StatusAccepted)
+}
 
 func (i TaskResource) WebService() *restful.WebService {
 	tags := []string{"Task"}
@@ -101,6 +143,13 @@ func (i TaskResource) WebService() *restful.WebService {
 	ws.Route(ws.GET("/funscript/export-new").To(i.exportNewFunscripts).
 		Metadata(restfulspec.KeyOpenAPITags, tags))
 
+	ws.Route(ws.POST("/funscript/python-dancer").To(i.pythonDancerFunscripts).
+		Metadata(restfulspec.KeyOpenAPITags, tags).
+		Writes(tasks.PythonDancerBatchResult{}))
+
+	ws.Route(ws.GET("/funscript/python-dancer").To(i.pythonDancerFunscriptsTask).
+		Metadata(restfulspec.KeyOpenAPITags, tags))
+
 	ws.Route(ws.GET("/bundle/backup").To(i.backupBundle).
 		Metadata(restfulspec.KeyOpenAPITags, tags).
 		Writes(ResponseBackupBundle{}))
@@ -128,31 +177,51 @@ func (i TaskResource) WebService() *restful.WebService {
 	ws.Route(ws.GET("/pmv-match-unmatched").To(i.pmvMatchUnmatchedTask).
 		Metadata(restfulspec.KeyOpenAPITags, tags))
 
+	ws.Route(ws.POST("/pmv-import").To(i.pmvImport).
+		Metadata(restfulspec.KeyOpenAPITags, tags).
+		Writes(tasks.PMVImportResult{}))
+
+	ws.Route(ws.POST("/pmv-import-list").To(i.pmvImportList).
+		Metadata(restfulspec.KeyOpenAPITags, tags).
+		Writes(tasks.PMVImportBatchResult{}))
+
 	return ws
 }
 
 func (i TaskResource) rescan(req *restful.Request, resp *restful.Response) {
 	id, err := strconv.Atoi(req.PathParameter("storage-id"))
 	if err != nil {
-		// no storage-id, refresh all
-		go tasks.RescanVolumes(-1)
+		startAPITask(req, resp, "rescan", logrus.Fields{
+			"storage_id": "all",
+		}, func() {
+			tasks.RescanVolumes(-1)
+		})
 		return
-	} else {
-		// just refresh the specified path
-		go tasks.RescanVolumes(id)
 	}
+
+	startAPITask(req, resp, "rescan", logrus.Fields{
+		"storage_id": id,
+	}, func() {
+		tasks.RescanVolumes(id)
+	})
 }
 
 func (i TaskResource) sceneRrefresh(req *restful.Request, resp *restful.Response) {
-	go tasks.RefreshSceneStatuses()
+	startAPITask(req, resp, "scene-refresh", nil, func() {
+		tasks.RefreshSceneStatuses()
+	})
 }
 
 func (i TaskResource) cleanTags(req *restful.Request, resp *restful.Response) {
-	go tasks.CleanTags()
+	startAPITask(req, resp, "clean-tags", nil, func() {
+		tasks.CleanTags()
+	})
 }
 
 func (i TaskResource) index(req *restful.Request, resp *restful.Response) {
-	go tasks.SearchIndex()
+	startAPITask(req, resp, "search-index", nil, func() {
+		tasks.SearchIndex()
+	})
 }
 
 func (i TaskResource) scrape(req *restful.Request, resp *restful.Response) {
@@ -160,7 +229,11 @@ func (i TaskResource) scrape(req *restful.Request, resp *restful.Response) {
 	if qSiteID == "" {
 		qSiteID = "_enabled"
 	}
-	go tasks.Scrape(qSiteID, "", "")
+	startAPITask(req, resp, "scrape", logrus.Fields{
+		"site": qSiteID,
+	}, func() {
+		tasks.Scrape(qSiteID, "", "")
+	})
 }
 func (i TaskResource) singleScrape(req *restful.Request, resp *restful.Response) {
 	var scrapeParams RequestSingleScrape
@@ -182,6 +255,91 @@ func (i TaskResource) exportAllFunscripts(req *restful.Request, resp *restful.Re
 
 func (i TaskResource) exportNewFunscripts(req *restful.Request, resp *restful.Response) {
 	tasks.ExportFunscripts(resp.ResponseWriter, true)
+}
+
+func (i TaskResource) pythonDancerFunscripts(req *restful.Request, resp *restful.Response) {
+	var r RequestPythonDancerBatch
+	if err := req.ReadEntity(&r); err != nil {
+		APIError(req, resp, http.StatusBadRequest, err)
+		return
+	}
+
+	result, statusCode, err := tasks.GeneratePythonDancerFunscripts(tasks.PythonDancerBatchRequest{
+		Limit:           r.Limit,
+		Concurrency:     r.Concurrency,
+		VolumeID:        r.VolumeID,
+		PathPrefix:      r.PathPrefix,
+		FileID:          r.FileID,
+		ForceRegenerate: r.ForceRegenerate,
+		PostProcessMode: r.PostProcessMode,
+	})
+	if err != nil {
+		APIError(req, resp, statusCode, err)
+		return
+	}
+	resp.WriteHeaderAndEntity(statusCode, result)
+}
+
+func (i TaskResource) pythonDancerFunscriptsTask(req *restful.Request, resp *restful.Response) {
+	limit, _ := strconv.Atoi(req.QueryParameter("limit"))
+	concurrency, _ := strconv.Atoi(req.QueryParameter("concurrency"))
+	volumeID64, _ := strconv.ParseUint(req.QueryParameter("volume_id"), 10, 64)
+	pathPrefix := strings.TrimSpace(req.QueryParameter("path_prefix"))
+	postProcessMode := strings.TrimSpace(req.QueryParameter("post_process_mode"))
+
+	startAPITask(req, resp, "python-dancer-funscripts", logrus.Fields{
+		"limit":             limit,
+		"concurrency":       concurrency,
+		"volume_id":         volumeID64,
+		"path_prefix":       pathPrefix,
+		"post_process_mode": postProcessMode,
+	}, func() {
+		tasks.RunPythonDancerFunscriptTask(tasks.PythonDancerBatchRequest{
+			Limit:           limit,
+			Concurrency:     concurrency,
+			VolumeID:        uint(volumeID64),
+			PathPrefix:      pathPrefix,
+			PostProcessMode: postProcessMode,
+		})
+	})
+}
+
+func (i TaskResource) pmvImport(req *restful.Request, resp *restful.Response) {
+	var r RequestPMVImport
+	if err := req.ReadEntity(&r); err != nil {
+		APIError(req, resp, http.StatusBadRequest, err)
+		return
+	}
+
+	result, statusCode, err := tasks.ImportPMVHavenVideo(tasks.PMVImportRequest{
+		URL:        r.URL,
+		PathPrefix: strings.TrimSpace(r.PathPrefix),
+	})
+	if err != nil {
+		APIError(req, resp, statusCode, err)
+		return
+	}
+	resp.WriteHeaderAndEntity(statusCode, result)
+}
+
+func (i TaskResource) pmvImportList(req *restful.Request, resp *restful.Response) {
+	var r RequestPMVImport
+	if err := req.ReadEntity(&r); err != nil {
+		APIError(req, resp, http.StatusBadRequest, err)
+		return
+	}
+
+	result, statusCode, err := tasks.ImportPMVHavenList(tasks.PMVImportRequest{
+		ListURL:     r.ListURL,
+		PathPrefix:  strings.TrimSpace(r.PathPrefix),
+		Limit:       r.Limit,
+		Concurrency: r.Concurrency,
+	})
+	if err != nil {
+		APIError(req, resp, statusCode, err)
+		return
+	}
+	resp.WriteHeaderAndEntity(statusCode, result)
 }
 
 func (i TaskResource) backupBundle(req *restful.Request, resp *restful.Response) {
@@ -224,11 +382,17 @@ func (i TaskResource) restoreBundle(req *restful.Request, resp *restful.Response
 		return
 	}
 
-	go tasks.RestoreBundle(r)
+	startAPITask(req, resp, "restore-bundle", logrus.Fields{
+		"bundle_url": strings.TrimSpace(r.BundleUrl),
+	}, func() {
+		tasks.RestoreBundle(r)
+	})
 }
 
 func (i TaskResource) previewGenerate(req *restful.Request, resp *restful.Response) {
-	go tasks.GeneratePreviews(nil)
+	startAPITask(req, resp, "preview-generate", nil, func() {
+		tasks.GeneratePreviews(nil)
+	})
 }
 
 func (i TaskResource) scrapeJAVR(req *restful.Request, resp *restful.Response) {
@@ -240,8 +404,16 @@ func (i TaskResource) scrapeJAVR(req *restful.Request, resp *restful.Response) {
 	}
 
 	if r.Query != "" {
-		go tasks.ScrapeJAVR(r.Query, r.Scraper)
+		startAPITask(req, resp, "scrape-javr", logrus.Fields{
+			"scraper": r.Scraper,
+			"query":   strings.TrimSpace(r.Query),
+		}, func() {
+			tasks.ScrapeJAVR(r.Query, r.Scraper)
+		})
+		return
 	}
+
+	resp.WriteHeader(http.StatusBadRequest)
 }
 
 func (i TaskResource) scrapeTPDB(req *restful.Request, resp *restful.Response) {
@@ -253,11 +425,20 @@ func (i TaskResource) scrapeTPDB(req *restful.Request, resp *restful.Response) {
 	}
 
 	if r.ApiToken != "" && r.SceneUrl != "" {
-		go tasks.ScrapeTPDB(strings.TrimSpace(r.ApiToken), strings.TrimSpace(r.SceneUrl))
+		startAPITask(req, resp, "scrape-tpdb", logrus.Fields{
+			"scene_url": strings.TrimSpace(r.SceneUrl),
+		}, func() {
+			tasks.ScrapeTPDB(strings.TrimSpace(r.ApiToken), strings.TrimSpace(r.SceneUrl))
+		})
+		return
 	}
+
+	resp.WriteHeader(http.StatusBadRequest)
 }
 func (i TaskResource) relink_alt_aource_scenes(req *restful.Request, resp *restful.Response) {
-	go tasks.MatchAlternateSources()
+	startAPITask(req, resp, "relink-alt-source-scenes", nil, func() {
+		tasks.MatchAlternateSources()
+	})
 }
 
 func (i TaskResource) pmvMatch(req *restful.Request, resp *restful.Response) {
@@ -283,11 +464,17 @@ func (i TaskResource) pmvMatchUnmatched(req *restful.Request, resp *restful.Resp
 	}
 
 	result, statusCode, err := tasks.MatchPMVUnmatchedFiles(tasks.PMVMatchBatchRequest{
-		DryRun:      r.DryRun,
-		Limit:       r.Limit,
-		Concurrency: r.Concurrency,
-		VolumeID:    r.VolumeID,
-		PathPrefix:  r.PathPrefix,
+		DryRun:            r.DryRun,
+		Limit:             r.Limit,
+		Concurrency:       r.Concurrency,
+		VolumeID:          r.VolumeID,
+		PathPrefix:        r.PathPrefix,
+		RefreshExisting:   r.RefreshExisting,
+		UpdateTitle:       r.UpdateTitle,
+		UpdateStudio:      r.UpdateStudio,
+		UpdateSceneURL:    r.UpdateSceneURL,
+		UpdateThumbnail:   r.UpdateThumbnail,
+		UpdateDescription: r.UpdateDescription,
 	})
 	if err != nil {
 		APIError(req, resp, statusCode, err)
@@ -300,14 +487,40 @@ func (i TaskResource) pmvMatchUnmatchedTask(req *restful.Request, resp *restful.
 	limit, _ := strconv.Atoi(req.QueryParameter("limit"))
 	concurrency, _ := strconv.Atoi(req.QueryParameter("concurrency"))
 	dryRun, _ := strconv.ParseBool(req.QueryParameter("dry_run"))
+	refreshExisting, _ := strconv.ParseBool(req.QueryParameter("refresh_existing"))
+	updateTitle, _ := strconv.ParseBool(req.QueryParameter("update_title"))
+	updateStudio, _ := strconv.ParseBool(req.QueryParameter("update_studio"))
+	updateSceneURL, _ := strconv.ParseBool(req.QueryParameter("update_scene_url"))
+	updateThumbnail, _ := strconv.ParseBool(req.QueryParameter("update_thumbnail"))
+	updateDescription, _ := strconv.ParseBool(req.QueryParameter("update_description"))
 	volumeID64, _ := strconv.ParseUint(req.QueryParameter("volume_id"), 10, 64)
 	pathPrefix := strings.TrimSpace(req.QueryParameter("path_prefix"))
 
-	go tasks.RunPMVMatchUnmatchedTask(tasks.PMVMatchBatchRequest{
-		DryRun:      dryRun,
-		Limit:       limit,
-		Concurrency: concurrency,
-		VolumeID:    uint(volumeID64),
-		PathPrefix:  pathPrefix,
+	startAPITask(req, resp, "pmv-match-unmatched", logrus.Fields{
+		"dry_run":            dryRun,
+		"limit":              limit,
+		"concurrency":        concurrency,
+		"volume_id":          volumeID64,
+		"path_prefix":        pathPrefix,
+		"refresh_existing":   refreshExisting,
+		"update_title":       updateTitle,
+		"update_studio":      updateStudio,
+		"update_scene_url":   updateSceneURL,
+		"update_thumbnail":   updateThumbnail,
+		"update_description": updateDescription,
+	}, func() {
+		tasks.RunPMVMatchUnmatchedTask(tasks.PMVMatchBatchRequest{
+			DryRun:            dryRun,
+			Limit:             limit,
+			Concurrency:       concurrency,
+			VolumeID:          uint(volumeID64),
+			PathPrefix:        pathPrefix,
+			RefreshExisting:   refreshExisting,
+			UpdateTitle:       updateTitle,
+			UpdateStudio:      updateStudio,
+			UpdateSceneURL:    updateSceneURL,
+			UpdateThumbnail:   updateThumbnail,
+			UpdateDescription: updateDescription,
+		})
 	})
 }

@@ -91,6 +91,11 @@ type ObjectConfig struct {
 			Username       string `default:"" json:"username"`
 			Password       string `default:"" json:"password"`
 		} `json:"deovr"`
+		Handy struct {
+			Enabled       bool   `default:"false" json:"enabled"`
+			ConnectionKey string `default:"" json:"connection_key"`
+			LatencyMs     int    `default:"0" json:"latency_ms"`
+		} `json:"handy"`
 		Heresphere struct {
 			AllowFileDeletes        bool `default:"false" json:"allow_file_deletes"`
 			AllowRatingUpdates      bool `default:"false" json:"allow_rating_updates"`

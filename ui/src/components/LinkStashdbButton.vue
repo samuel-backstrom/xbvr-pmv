@@ -15,6 +15,16 @@
               </svg>
            </span>
         </a>
+        <a
+            v-if="showEroScriptsButton"
+            class="button is-info is-outlined is-small"
+            :href="eroscriptsSearchUrl"
+            :title="'Search EroScripts for this scene title'"
+            target="_blank"
+            rel="noreferrer"
+        >
+            <b-icon pack="mdi" icon="magnify" size="is-small" />
+        </a>
     </span>
 </template>
 
@@ -34,6 +44,13 @@ export default {
   computed: {
     buttonClass () {
       return 'button  is-outlined is-small'
+    },
+    showEroScriptsButton () {
+      return this.objectType === 'scene' && typeof this.item?.title === 'string' && this.item.title.trim() !== ''
+    },
+    eroscriptsSearchUrl () {
+      const title = (this.item?.title || '').trim()
+      return `https://discuss.eroscripts.com/search?q=${encodeURIComponent(title)}`
     }
   },
   methods: {

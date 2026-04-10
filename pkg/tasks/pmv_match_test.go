@@ -90,18 +90,43 @@ func TestBuildPMVSearchQueries_DropsLeadingChannelToken(t *testing.T) {
 	}
 }
 
+func TestBuildPMVSearchQueries_ProgressiveTailTrimFallback(t *testing.T) {
+	base := "the gauntlet a voice assisted pmv compilation by account for combustion"
+	queries := buildPMVSearchQueries("The_Gauntlet.mp4", base)
+
+	want := "the gauntlet a voice assisted pmv compilation by"
+	found := false
+	for _, q := range queries {
+		if q == want {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected progressive tail-trim query %q, got %v", want, queries)
+	}
+}
+
 func TestInferPMVStudio_FromCandidateTitlePrefix(t *testing.T) {
 	filename := "YourVideosCouldLookBetter_-_ADHDPMV_-_4k60_-_Feminist_to_Daddy's_Girl_-_World_PMV_Games_2025_upscale.mp4"
 	title := "ADHDPMV - 4k60 - Feminist to Daddy's Girl - World PMV Games 2025 upscale"
-	if got := inferPMVStudio(filename, title); got != "ADHDPMV" {
+	if got := inferPMVStudio(filename, title, ""); got != "ADHDPMV" {
 		t.Fatalf("expected ADHDPMV, got %q", got)
 	}
 }
 
 func TestInferPMVStudio_FromFilenameFallback(t *testing.T) {
 	filename := "CrimsonPMV_-_MultiStroke_-_Gooner_PMV_Crimson_PMV_1768217534327_eokwfllu.mp4"
-	if got := inferPMVStudio(filename, ""); got != "CrimsonPMV" {
+	if got := inferPMVStudio(filename, "", ""); got != "CrimsonPMV" {
 		t.Fatalf("expected CrimsonPMV, got %q", got)
+	}
+}
+
+func TestInferPMVStudio_PrefersChannel(t *testing.T) {
+	filename := "SomeEditor_-_Some_Title.mp4"
+	title := "AnotherEditor - Some Title"
+	if got := inferPMVStudio(filename, title, "ADHDPMV"); got != "ADHDPMV" {
+		t.Fatalf("expected ADHDPMV, got %q", got)
 	}
 }
 
@@ -132,5 +157,23 @@ func TestNormalizePMVBatchConcurrency(t *testing.T) {
 	}
 	if got := normalizePMVBatchConcurrency(12); got != 12 {
 		t.Fatalf("expected passthrough concurrency, got %d", got)
+	}
+}
+
+func TestNormalizePMVMetadataUpdateOptions_DefaultsToAll(t *testing.T) {
+	opts := normalizePMVMetadataUpdateOptions(PMVMatchBatchRequest{})
+	if !opts.Title || !opts.Studio || !opts.SceneURL || !opts.Thumbnail || !opts.Description {
+		t.Fatalf("expected all update options enabled by default, got %+v", opts)
+	}
+}
+
+func TestNormalizePMVMetadataUpdateOptions_RespectsSelection(t *testing.T) {
+	opts := normalizePMVMetadataUpdateOptions(PMVMatchBatchRequest{
+		UpdateStudio:      true,
+		UpdateThumbnail:   true,
+		UpdateDescription: true,
+	})
+	if opts.Title || !opts.Studio || opts.SceneURL || !opts.Thumbnail || !opts.Description {
+		t.Fatalf("expected only studio+thumbnail, got %+v", opts)
 	}
 }

@@ -6,22 +6,22 @@
       </b-navbar-item>
     </template>
     <template slot="start">
-      <b-navbar-item tag="router-link" :to="{ path: './' }">
+      <b-navbar-item tag="router-link" :to="{ name: 'scenes' }">
         {{$t('Scenes')}}
       </b-navbar-item>
-      <b-navbar-item tag="router-link" :to="{ path: './actors' }">
+      <b-navbar-item tag="router-link" :to="{ name: 'actors' }">
         {{$t('Actors')}}
       </b-navbar-item>
-      <b-navbar-item tag="router-link" :to="{ path: './files' }">
+      <b-navbar-item tag="router-link" :to="{ name: 'files' }">
         {{$t('Files')}}
       </b-navbar-item>
-      <b-navbar-item tag="router-link" :to="{ path: './options' }">
+      <b-navbar-item tag="router-link" :to="{ name: 'options' }">
         {{$t('Options')}}
       </b-navbar-item>
       <b-navbar-item @click="$store.commit('overlay/showQuickFind')">
         {{$t('Quick find')}}
       </b-navbar-item>
-      <b-navbar-item tag="router-link" :to="{ path: './logs' }">
+      <b-navbar-item tag="router-link" :to="{ name: 'logs' }">
         Logs
       </b-navbar-item>
     </template>

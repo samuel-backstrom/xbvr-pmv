@@ -23,6 +23,9 @@
           <b-field :label="$t('Title')" label-position="on-border">            
             <b-input v-model='title' ></b-input>            
           </b-field>
+          <b-field label="PMVHaven URL" label-position="on-border">
+            <b-input v-model="pmvHavenURL" type="url" placeholder="https://pmvhaven.com/video/..."/>
+          </b-field>
           <b-button class="button is-primary" style="margin-right:1em" v-on:click="addScene(false)">{{$t('Create')}}</b-button>            
           <b-button class="button is-primary" v-on:click="addScene(true)">{{$t('Create and Edit')}} </b-button>            
         </div>
@@ -42,6 +45,7 @@ export default {
     return {
       title: '',
       sceneId: '',
+      pmvHavenURL: '',
       format,
       parseISO
     }
@@ -79,7 +83,7 @@ export default {
       return parseInt(value, radix || 10) || defaultValue || 0
     },
     addScene(showEdit) {      
-      ky.post('/api/scene/create', { json: { title: this.title, id: this.sceneId, filename: this.file.filename } })
+      ky.post('/api/scene/create', { json: { title: this.title, id: this.sceneId, filename: this.file.filename, pmvhaven_url: this.pmvHavenURL } })
         .json()
         .then(scene => {          
           ky.post('/api/files/match', { json: {file_id: this.file.id, scene_id: scene.scene_id}})          

@@ -24,6 +24,7 @@
           </b-menu-list>
           <b-menu-list :label="$t('Interfaces')">
             <b-menu-item :label="$t('Players')" :active="active==='interface_deovr'" @click="setActive('interface_deovr')"/>
+            <b-menu-item :label="$t('The Handy')" :active="active==='interface_handy'" @click="setActive('interface_handy')"/>
             <b-menu-item :label="$t('DLNA')" :active="active==='interface_dlna'" @click="setActive('interface_dlna')"/>
             <b-menu-item :label="$t('Web UI')" :active="active==='interface_web'" @click="setActive('interface_web')"/>
             <b-menu-item :label="$t('Advanced')" :active="active==='interface_advanced'" @click="setActive('interface_advanced')"/>
@@ -46,6 +47,7 @@
           <InterfaceWeb v-show="active==='interface_web'"/>
           <InterfaceDLNA v-show="active==='interface_dlna'"/>
           <InterfaceDeoVR v-show="active==='interface_deovr'"/>
+          <InterfaceHandy v-show="active==='interface_handy'"/>
           <InterfaceAdvanced v-show="active==='interface_advanced'"/>
           <Logging v-show="active==='interface_logging'"/>
           <SceneMatchParams v-if="showMatchParamsOverlay"/>
@@ -69,12 +71,13 @@ import Previews from './sections/Previews.vue'
 import PMVMatching from './sections/PMVMatching.vue'
 import Schedules from './sections/Schedules.vue'
 import InterfaceDeoVR from './sections/InterfaceDeoVR.vue'
+import InterfaceHandy from './sections/InterfaceHandy.vue'
 import InterfaceAdvanced from './sections/InterfaceAdvanced.vue'
 import Logging from './sections/Logging.vue'
 import SceneMatchParams from './overlays/SceneMatchParams.vue'
 
 export default {
-  components: { Storage, SceneDataScrapers, SceneCreate, Funscripts, SceneDataImportExport, InterfaceWeb, InterfaceDLNA, InterfaceDeoVR, Cache, Previews, PMVMatching, Schedules, InterfaceAdvanced, Logging, SceneMatchParams },
+  components: { Storage, SceneDataScrapers, SceneCreate, Funscripts, SceneDataImportExport, InterfaceWeb, InterfaceDLNA, InterfaceDeoVR, InterfaceHandy, Cache, Previews, PMVMatching, Schedules, InterfaceAdvanced, Logging, SceneMatchParams },
   data: function () {
     return {
       active: 'storage'

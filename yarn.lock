@@ -1314,6 +1314,11 @@
     "@babel/helper-string-parser" "^7.27.1"
     "@babel/helper-validator-identifier" "^7.28.5"
 
+"@bem-react/classname@^1.5.12":
+  version "1.8.0"
+  resolved "https://registry.yarnpkg.com/@bem-react/classname/-/classname-1.8.0.tgz#e4a910f31d933a6686a2d2ce7fe44f9fe77869c1"
+  integrity sha512-uazGRFKTMNbGR8KLvEh5qT+aP0yuym+sB+YFFaAyCkFodtjI0SskV6BfkiZ9+E3FloIFYPkwqJ1owxp48WCS9g==
+
 "@emnapi/core@^1.4.3":
   version "1.4.3"
   resolved "https://registry.yarnpkg.com/@emnapi/core/-/core-1.4.3.tgz#9ac52d2d5aea958f67e52c40a065f51de59b77d6"
@@ -1668,6 +1673,15 @@
   dependencies:
     "@nodelib/fs.scandir" "2.1.5"
     fastq "^1.6.0"
+
+"@ohdoki/handy-sdk@2.3.4":
+  version "2.3.4"
+  resolved "https://registry.yarnpkg.com/@ohdoki/handy-sdk/-/handy-sdk-2.3.4.tgz#07770217568e8fa9df8b8c140d4b9385b35eacb5"
+  integrity sha512-Y0w5GrFEGuHiZg+li9v+YUkDerZ4umFE8ZB+XCUOMPyuIV9St+qkve7smj2cf0nzV1hI1owmlOXQZL0MM/OH8g==
+  dependencies:
+    "@bem-react/classname" "^1.5.12"
+    mitt "^3.0.0"
+    preact "^10.11.2"
 
 "@oxc-resolver/binding-darwin-arm64@5.3.0":
   version "5.3.0"
@@ -7088,6 +7102,11 @@ minipass@^3.1.1:
   dependencies:
     yallist "^4.0.0"
 
+mitt@^3.0.0:
+  version "3.0.1"
+  resolved "https://registry.yarnpkg.com/mitt/-/mitt-3.0.1.tgz#ea36cf0cc30403601ae074c8f77b7092cdab36d1"
+  integrity sha512-vKivATfr97l2/QBCYAkXYDbrIWPM2IIKEl7YPhjCvKlG3kE2gm+uBo6nEXK3M5/Ffh/FLpKExzOQ3JJoJGFKBw==
+
 mkdirp@^0.5.5:
   version "0.5.5"
   resolved "https://registry.yarnpkg.com/mkdirp/-/mkdirp-0.5.5.tgz#d91cefd62d1436ca0f41620e251288d420099def"
@@ -8011,6 +8030,11 @@ postcss@^8.2.6, postcss@^8.3.5, postcss@^8.4.14, postcss@^8.4.7:
     nanoid "^3.3.4"
     picocolors "^1.0.0"
     source-map-js "^1.0.2"
+
+preact@^10.11.2:
+  version "10.29.0"
+  resolved "https://registry.yarnpkg.com/preact/-/preact-10.29.0.tgz#a6e5858670b659c4d471c6fea232233e03b403e8"
+  integrity sha512-wSAGyk2bYR1c7t3SZ3jHcM6xy0lcBcDel6lODcs9ME6Th++Dx2KU+6D3HD8wMMKGA8Wpw7OMd3/4RGzYRpzwRg==
 
 prelude-ls@^1.2.1:
   version "1.2.1"

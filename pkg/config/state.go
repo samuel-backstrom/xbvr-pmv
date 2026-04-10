@@ -73,7 +73,7 @@ func SaveState() {
 	if err == nil {
 		obj := models.KV{Key: "state", Value: string(data)}
 		obj.Save()
-		common.Log.Info("Saved state")
+		common.Log.Debug("Saved state")
 	}
 }
 

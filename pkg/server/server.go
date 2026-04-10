@@ -127,6 +127,12 @@ func StartServer(version, commit, branch, date string) {
 				},
 				{
 					TagProps: spec.TagProps{
+						Name:        "Handy",
+						Description: "Endpoints for interfacing with The Handy player",
+					},
+				},
+				{
+					TagProps: spec.TagProps{
 						Name:        "HereSphere",
 						Description: "Endpoints for interfacing with HereSphere player",
 					},

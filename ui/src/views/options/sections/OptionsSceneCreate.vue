@@ -45,6 +45,9 @@
           <b-field label="Scene title" label-position="on-border">
             <b-input v-model="customSceneTitle" placeholder="Stepsis stuck in washing machine" type="search"></b-input>
           </b-field>
+          <b-field label="PMVHaven URL" label-position="on-border">
+            <b-input v-model="customScenePMVHavenURL" placeholder="https://pmvhaven.com/video/..." type="url"></b-input>
+          </b-field>
           <b-field label="Scene ID" label-position="on-border" grouped>
             <b-input v-model="customSceneID" placeholder="Can be empty" type="search"></b-input>
             <b-button class="button is-primary" v-on:click="addScene(false)">{{$t('Create')}}</b-button>
@@ -105,6 +108,7 @@ export default {
       tpdbSceneUrl: '',
       customSceneTitle: '',
       customSceneID: '',
+      customScenePMVHavenURL: '',
       scrapeUrl: '',
       isSingleScrapeModalActive: false,
       singleScrapeId: '',
@@ -133,7 +137,7 @@ export default {
     },
     addScene(showEdit) {
       if (this.customSceneTitle !== '') {
-        ky.post('/api/scene/create', { json: { title: this.customSceneTitle, id: this.customSceneID } })
+        ky.post('/api/scene/create', { json: { title: this.customSceneTitle, id: this.customSceneID, pmvhaven_url: this.customScenePMVHavenURL } })
         .json()
         .then(scene => {          
           if (showEdit) {

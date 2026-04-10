@@ -95,7 +95,6 @@ import EditButton from '../../components/EditButton'
 import LinkStashdbButton from '../../components/LinkStashdbButton'
 import TrailerlistButton from '../../components/TrailerlistButton'
 import HiddenButton from '../../components/HiddenButton'
-import ky from 'ky'
 import VueLoadImage from 'vue-load-image'
 
 export default {
@@ -220,18 +219,11 @@ export default {
           } 
     },
     showDetails (scene) {
-      // reRead is required when the SceneCard is clicked from the ActorDetails
-      // the Scenes associated Tables such as Tags, Cast arwon't be Preloaded and
-      // will cause errors when the Details Overlay loads
-      if (this.reRead) {
-        ky.get('/api/scene/'+scene.id).json().then(data => {
-          if (data.id != 0){
-            this.$store.commit('overlay/showDetails', { scene: data })
-          }
-        })
-      } else {
-        this.$store.commit('overlay/showDetails', { scene: scene })
-      }
+      this.$router.push({
+        name: 'scene',
+        params: { id: String(scene.id) },
+        query: this.$route.query
+      })
       this.$store.commit('overlay/hideActorDetails')
     },
     getHeatmapURL (fileId) {
@@ -285,7 +277,10 @@ export default {
     padding: 0;
     line-height: 0;
     cursor: pointer;
+<<<<<<< HEAD
     border-radius: var(--radius-md) var(--radius-md) 0 0;
+=======
+>>>>>>> d18040f (changes)
   }
 
   .bbox:not(:hover) > video {

@@ -469,7 +469,7 @@ func scanPutIO(vol models.Volume, db *gorm.DB, tlog *logrus.Entry) {
 }
 func RefreshSceneStatuses() {
 	// refreshes the status of all scenes
-	tlog := log.WithFields(logrus.Fields{"task": "rescan"})
+	tlog := log.WithFields(logrus.Fields{"task": "scene-refresh"})
 	tlog.Infof("Update status of Scenes")
 	db, _ := models.GetDB()
 	defer db.Close()

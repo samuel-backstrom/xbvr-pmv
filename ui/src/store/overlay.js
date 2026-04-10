@@ -6,6 +6,13 @@ const state = {
     prevscene: null,
     query_for_altsrc: '',
   },
+  inlineDetails: {
+    show: false,
+    scene: null,
+    altsrc: null,
+    prevscene: null,
+    query_for_altsrc: '',
+  },
   edit: {
     show: false,
     scene: null
@@ -74,6 +81,26 @@ const mutations = {
     }else {
       state.details.scene = null
       state.details.show = false
+    }
+  },
+  showInlineDetails (state, payload) {
+    state.inlineDetails.scene = payload.scene
+    state.inlineDetails.altsrc = payload.altsrc
+    state.inlineDetails.prevscene = payload.prevscene
+    state.inlineDetails.query_for_altsrc = payload.query_for_altsrc
+    state.inlineDetails.show = true
+  },
+  hideInlineDetails (state, payload) {
+    if (state.inlineDetails.altsrc != null) {
+      state.inlineDetails.show = false
+      state.inlineDetails.altsrc = null
+      state.inlineDetails.scene = state.inlineDetails.prevscene
+      state.inlineDetails.prevscene = null
+      state.inlineDetails.query_for_altsrc = ''
+      state.inlineDetails.show = true
+    } else {
+      state.inlineDetails.scene = null
+      state.inlineDetails.show = false
     }
   },
   editDetails (state, payload) {

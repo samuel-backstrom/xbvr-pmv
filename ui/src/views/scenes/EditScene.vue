@@ -2,7 +2,7 @@
   <div class="modal is-active">
     <GlobalEvents
       :filter="e => !['INPUT', 'TEXTAREA'].includes(e.target.tagName)"
-      @keyup.esc="close"
+      @keyup.esc="handleEscape"
       @keyup.s="save"/>
 
     <div class="modal-background"></div>
@@ -36,6 +36,9 @@
 
               <b-field :label="$t('Scene URL')">
                 <b-input type="text" v-model="scene.scene_url" @blur="blur('scene_url')"/>
+              </b-field>
+              <b-field label="PMVHaven URL">
+                <b-input type="text" v-model="scene.pmvhaven_url" @blur="blur('pmvhaven_url')"/>
               </b-field>
 
               <b-field :label="$t('Release Date')">
@@ -93,14 +96,125 @@
               @setCover="setCoverImage"
             />
           </b-tab-item>
+
+          <b-tab-item :label="$t('Funscripts')">
+            <div class="content">
+              <p>
+                Force regenerate `.funscript` files for the scene videos using PythonDancer.
+                Choose whether to force post-processing or skip it entirely.
+              </p>
+
+              <div v-if="videoFiles.length === 0" class="notification is-light">
+                No video files are linked to this scene.
+              </div>
+
+              <div v-for="file in videoFiles" :key="file.id" class="box funscript-box">
+                <div class="is-flex is-justify-content-space-between is-align-items-center funscript-row">
+                  <div class="funscript-meta">
+                    <strong>{{ file.filename }}</strong>
+                    <p class="is-size-7 has-text-grey">{{ file.path }}</p>
+                  </div>
+                  <div class="buttons are-small">
+                    <b-button
+                      type="is-primary"
+                      icon-left="pulse"
+                      :loading="regenFileId === file.id && regenMode === 'always'"
+                      @click="regenerateFunscript(file, 'always')"
+                    >
+                      Regenerate with post-processing
+                    </b-button>
+                    <b-button
+                      type="is-light"
+                      icon-left="pulse"
+                      :loading="regenFileId === file.id && regenMode === 'never'"
+                      @click="regenerateFunscript(file, 'never')"
+                    >
+                      Regenerate without post-processing
+                    </b-button>
+                    <b-button
+                      type="is-info"
+                      icon-left="folder-open"
+                      :disabled="scene.id == 0"
+                      @click="openFunscriptPicker(file)"
+                    >
+                      Select funscript
+                    </b-button>
+                    <b-button
+                      type="is-warning"
+                      icon-left="image-plus"
+                      :disabled="scene.id == 0"
+                      :loading="thumbFileId === file.id"
+                      @click="generateThumbnail(file)"
+                    >
+                      Generate thumbnail
+                    </b-button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </b-tab-item>
         </b-tabs>
 
       </section>
 
       <footer class="modal-card-foot is-justify-content-space-between">
-        <b-button type="is-primary" @click="save">{{ $t('Save Scene Details') }}</b-button>
+        <div class="buttons">
+          <b-button type="is-primary" @click="save">{{ $t('Save Scene Details') }}</b-button>
+          <link-stashdb-button :item="scene" objectType="scene" />
+        </div>
         <b-button v-if="this.scene.id != 0" type="is-danger" outlined @click="deletescene">{{ $t('Delete Scene') }}</b-button>
       </footer>
+    </div>
+
+    <div v-if="showFunscriptPicker" class="modal is-active">
+      <div class="modal-background" @click="closeFunscriptPicker"></div>
+      <div class="modal-card funscript-picker-modal">
+        <header class="modal-card-head">
+          <p class="modal-card-title">Select funscript</p>
+          <button class="delete" @click="closeFunscriptPicker" aria-label="close"></button>
+        </header>
+        <section class="modal-card-body">
+          <b-loading :is-full-page="false" :active.sync="funscriptPickerLoading" />
+          <div class="content">
+            <p>
+              Pick a `.funscript` for <strong>{{ funscriptPickerVideoFile ? funscriptPickerVideoFile.filename : 'the selected video' }}</strong>.
+              XBVR will rename the funscript to match the video file and then match it to this scene.
+            </p>
+          </div>
+          <b-field label="Filter filenames" label-position="on-border">
+            <b-input v-model="funscriptPickerQuery" placeholder="Search within funscripts" />
+          </b-field>
+          <div class="mb-3">
+            <b-button type="is-light" icon-left="refresh" :loading="funscriptPickerLoading" @click="loadFunscriptPickerFiles">
+              Refresh list
+            </b-button>
+          </div>
+          <b-table :data="filteredFunscriptPickerFiles" :loading="funscriptPickerLoading" paginated :per-page="8" hoverable>
+            <b-table-column field="filename" label="Filename" v-slot="props">
+              <strong>{{ props.row.filename }}</strong>
+            </b-table-column>
+            <b-table-column field="path" label="Path" v-slot="props">
+              <span class="path-cell">{{ props.row.path }}</span>
+            </b-table-column>
+            <b-table-column field="scene_id" label="Matched" width="120" v-slot="props">
+              <span>{{ props.row.scene_id || 'unmatched' }}</span>
+            </b-table-column>
+            <b-table-column field="_select" width="140" v-slot="props">
+              <b-button
+                type="is-primary"
+                size="is-small"
+                :loading="pickerAttachLoadingId === props.row.id"
+                @click="attachFunscript(props.row)"
+              >
+                Select
+              </b-button>
+            </b-table-column>
+          </b-table>
+          <div v-if="!funscriptPickerLoading && filteredFunscriptPickerFiles.length === 0" class="notification is-light">
+            No funscripts found for this filter.
+          </div>
+        </section>
+      </div>
     </div>
   </div>
 </template>
@@ -110,10 +224,11 @@ import ky from 'ky'
 import GlobalEvents from 'vue-global-events'
 import ListEditor from '../../components/ListEditor'
 import GalleryEditor from '../../components/GalleryEditor'
+import LinkStashdbButton from '../../components/LinkStashdbButton'
 
 export default {
   name: 'EditScene',
-  components: { ListEditor, GlobalEvents, GalleryEditor },
+  components: { ListEditor, GlobalEvents, GalleryEditor, LinkStashdbButton },
   data () {
     /*
     title: string,
@@ -129,6 +244,10 @@ export default {
     is_multipart: bool
      */
     const scene = Object.assign({}, this.$store.state.overlay.edit.scene)
+    scene.pmvhaven_url = ''
+    if (typeof scene.scene_url === 'string' && scene.scene_url.toLowerCase().includes('pmvhaven.com/video/')) {
+      scene.pmvhaven_url = scene.scene_url
+    }
     scene.castArray = scene.cast.map(c => c.name)
     scene.tagsArray = scene.tags.map(t => t.name)
     let images
@@ -164,7 +283,16 @@ export default {
       source: JSON.parse(JSON.stringify(scene)),
       filteredCast: [],
       filteredTags: [],
-      changesMade: false
+      changesMade: false,
+      regenFileId: 0,
+      regenMode: '',
+      thumbFileId: 0,
+      showFunscriptPicker: false,
+      funscriptPickerVideoFile: null,
+      funscriptPickerFiles: [],
+      funscriptPickerQuery: '',
+      funscriptPickerLoading: false,
+      pickerAttachLoadingId: 0
     }
   },
   methods: {
@@ -179,6 +307,13 @@ export default {
         option.toString().toLowerCase().indexOf(text.toLowerCase()) >= 0) &&
         !this.scene.tags.some(entry => entry.name === option.toString())
       )
+    },
+    handleEscape () {
+      if (this.showFunscriptPicker) {
+        this.closeFunscriptPicker()
+        return
+      }
+      this.close()
     },
     close () {
       if (this.changesMade) {
@@ -291,11 +426,216 @@ export default {
     setCoverImage (url) {
       this.scene.cover_url = url
       this.changesMade = true
+    },
+    openFunscriptPicker (videoFile) {
+      this.funscriptPickerVideoFile = videoFile
+      this.funscriptPickerQuery = ''
+      this.showFunscriptPicker = true
+      this.loadFunscriptPickerFiles()
+    },
+    closeFunscriptPicker () {
+      this.showFunscriptPicker = false
+      this.funscriptPickerVideoFile = null
+      this.funscriptPickerFiles = []
+      this.funscriptPickerQuery = ''
+      this.pickerAttachLoadingId = 0
+    },
+    async loadFunscriptPickerFiles () {
+      this.funscriptPickerLoading = true
+      try {
+        const data = await ky.post('/api/files/list', {
+          json: {
+            state: 'all',
+            filename: '.funscript',
+            sort: 'created_time_desc'
+          }
+        }).json()
+        this.funscriptPickerFiles = Array.isArray(data)
+          ? data.filter(file => typeof file.filename === 'string' && file.filename.toLowerCase().endsWith('.funscript'))
+          : []
+      } catch (error) {
+        console.warn('[Handy] failed to load funscript picker files', error)
+        this.funscriptPickerFiles = []
+      } finally {
+        this.funscriptPickerLoading = false
+      }
+    },
+    async attachFunscript (scriptFile) {
+      if (!this.funscriptPickerVideoFile || !scriptFile || this.pickerAttachLoadingId) {
+        return
+      }
+
+      this.pickerAttachLoadingId = scriptFile.id
+      try {
+        const result = await ky.post('/api/files/attach-script', {
+          json: {
+            scene_id: this.scene.id,
+            video_file_id: this.funscriptPickerVideoFile.id,
+            script_file_id: scriptFile.id
+          }
+        }).json()
+
+        this.$store.commit('sceneList/updateScene', result)
+        this.$buefy.toast.open({
+          message: `Matched ${scriptFile.filename} to ${this.funscriptPickerVideoFile.filename}.`,
+          type: 'is-success',
+          duration: 4000
+        })
+        this.closeFunscriptPicker()
+        this.changesMade = false
+        await this.refreshSceneData()
+      } catch (error) {
+        console.warn('[Handy] failed to attach funscript', error)
+        this.$buefy.toast.open({
+          message: 'Failed to attach the funscript.',
+          type: 'is-danger',
+          duration: 5000
+        })
+      } finally {
+        this.pickerAttachLoadingId = 0
+      }
+    },
+    async generateThumbnail (file) {
+      if (!file || !file.id || this.thumbFileId) {
+        return
+      }
+
+      this.thumbFileId = file.id
+      try {
+        const result = await ky.post('/api/files/generate-thumbnail', {
+          json: {
+            scene_id: this.scene.id,
+            video_file_id: file.id
+          }
+        }).json()
+
+        this.$store.commit('sceneList/updateScene', result)
+        this.$buefy.toast.open({
+          message: `Generated thumbnail from ${file.filename}.`,
+          type: 'is-success',
+          duration: 4000
+        })
+        await this.refreshSceneData(false)
+      } catch (error) {
+        console.warn('[Scene] failed to generate thumbnail', error)
+        this.$buefy.toast.open({
+          message: 'Failed to generate a thumbnail.',
+          type: 'is-danger',
+          duration: 5000
+        })
+      } finally {
+        this.thumbFileId = 0
+      }
+    },
+    async regenerateFunscript (file, postProcessMode) {
+      if (!file || !file.id || this.regenFileId) {
+        return
+      }
+      this.regenFileId = file.id
+      this.regenMode = postProcessMode
+      try {
+        const result = await ky.post('/api/task/funscript/python-dancer', {
+          json: {
+            file_id: file.id,
+            force_regenerate: true,
+            post_process_mode: postProcessMode
+          },
+          timeout: false
+        }).json()
+
+        const item = result && result.results && result.results.length ? result.results[0] : null
+        this.$buefy.toast.open({
+          message: item && item.error ? item.error : 'Funscript regenerated.',
+          type: item && item.error ? 'is-danger' : 'is-success',
+          duration: item && item.error ? 6000 : 4000
+        })
+
+        if (!item || !item.error) {
+          await this.refreshSceneData(false)
+        }
+      } catch (error) {
+        this.$buefy.toast.open({
+          message: 'Failed to regenerate funscript.',
+          type: 'is-danger',
+          duration: 5000
+        })
+      } finally {
+        this.regenFileId = 0
+        this.regenMode = ''
+      }
+    },
+    async refreshSceneData (showDetails = false) {
+      const data = await ky.get('/api/scene/' + this.scene.id).json()
+      if (!data || !data.id) {
+        return
+      }
+
+      data.pmvhaven_url = ''
+      if (typeof data.scene_url === 'string' && data.scene_url.toLowerCase().includes('pmvhaven.com/video/')) {
+        data.pmvhaven_url = data.scene_url
+      }
+      data.castArray = data.cast.map(c => c.name)
+      data.tagsArray = data.tags.map(t => t.name)
+
+      let images
+      try {
+        images = JSON.parse(data.images)
+      } catch {
+        images = []
+      }
+      data.gallery = images.map(i => i.url)
+      if (!data.cover_url && data.gallery.length > 0) {
+        data.cover_url = data.gallery[0]
+      }
+
+      try {
+        data.files = JSON.parse(data.filenames_arr)
+        if (data.files == null) {
+          data.files = []
+        }
+      } catch {
+        data.files = []
+      }
+
+      this.scene = data
+      this.source = JSON.parse(JSON.stringify(data))
+      this.$store.commit('sceneList/updateScene', data)
+      if (showDetails) {
+        this.$store.commit('overlay/showDetails', { scene: data })
+      }
     }
   },
   computed: {
     filters () {
       return this.$store.state.sceneList.filterOpts
+    },
+    filteredFunscriptPickerFiles () {
+      const query = this.funscriptPickerQuery.trim().toLowerCase()
+      return this.funscriptPickerFiles.filter(file => {
+        const filename = (file.filename || '').toLowerCase()
+        const path = (file.path || '').toLowerCase()
+        if (!filename.endsWith('.funscript')) {
+          return false
+        }
+        if (!query) {
+          return true
+        }
+        return filename.includes(query) || path.includes(query)
+      })
+    },
+    videoFiles () {
+      const files = this.scene.file || (this.$store.state.overlay.edit.scene && this.$store.state.overlay.edit.scene.file)
+      if (!files) {
+        return []
+      }
+      return files
+        .filter(file => file.type === 'video')
+        .slice()
+        .sort((a, b) => {
+          const left = Date.parse(a.created_time || '') || 0
+          const right = Date.parse(b.created_time || '') || 0
+          return right - left
+        })
     }
   }
 }
@@ -308,5 +648,25 @@ export default {
 
 .tab-item {
   height: 40vh;
+}
+
+.funscript-box {
+  margin-bottom: 1rem;
+}
+
+.funscript-row {
+  gap: 1rem;
+}
+
+.funscript-meta {
+  min-width: 0;
+}
+
+.funscript-picker-modal {
+  width: 80%;
+}
+
+.path-cell {
+  word-break: break-all;
 }
 </style>

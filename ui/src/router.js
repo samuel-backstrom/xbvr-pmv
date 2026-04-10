@@ -3,6 +3,7 @@ import Router from 'vue-router'
 
 import Options from './views/options/Options'
 import Scenes from './views/scenes/Scenes'
+import ScenePage from './views/scenes/ScenePage'
 import Actors  from './views/actors/Actors'
 import Files from './views/files/Files'
 import Logs from './views/logs/Logs'
@@ -17,6 +18,11 @@ export default new Router({
       path: '/',
       name: 'scenes',
       component: Scenes
+    },
+    {
+      path: '/scene/:id',
+      name: 'scene',
+      component: ScenePage
     },
     {
       path: '/actors',

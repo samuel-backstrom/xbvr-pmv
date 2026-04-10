@@ -20,6 +20,7 @@ import (
 	"github.com/mcuadros/go-version"
 	"github.com/pkg/errors"
 	"github.com/putdotio/go-putio"
+	"github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/oauth2"
@@ -113,6 +114,26 @@ type RequestSaveOptionsDeoVR struct {
 	SubtitleSortSeq         string `json:"subtitle_sort_seq"`
 	MultitrackCastCuepoints bool   `json:"multitrack_cast_cuepoints"`
 	RetainNonHSPCuepoints   bool   `json:"retain_non_hsp_cuepoints"`
+}
+
+type RequestSaveOptionsHandy struct {
+	Enabled       bool   `json:"enabled"`
+	ConnectionKey string `json:"connection_key"`
+	LatencyMs     int    `json:"latency_ms"`
+}
+
+type HandyStatusResponse struct {
+	Enabled          bool      `json:"enabled"`
+	ConnectionKeySet bool      `json:"connection_key_set"`
+	Connected        bool      `json:"connected"`
+	Mode             string    `json:"mode"`
+	Message          string    `json:"message"`
+	Error            string    `json:"error,omitempty"`
+	CheckedAt        time.Time `json:"checked_at"`
+}
+
+type HandyRemoveScriptResponse struct {
+	Stopped bool `json:"stopped"`
 }
 
 type RequestSaveOptionsPreviews struct {
@@ -299,6 +320,14 @@ func (i ConfigResource) WebService() *restful.WebService {
 
 	// "Web UI" section endpoints
 	ws.Route(ws.PUT("/interface/deovr").To(i.saveOptionsDeoVR).
+		Metadata(restfulspec.KeyOpenAPITags, tags))
+
+	// "Handy" section endpoints
+	ws.Route(ws.PUT("/interface/handy").To(i.saveOptionsHandy).
+		Metadata(restfulspec.KeyOpenAPITags, tags))
+	ws.Route(ws.GET("/interface/handy/status").To(i.getHandyStatus).
+		Metadata(restfulspec.KeyOpenAPITags, tags))
+	ws.Route(ws.POST("/interface/handy/remove-script").To(i.removeHandyScript).
 		Metadata(restfulspec.KeyOpenAPITags, tags))
 
 	// "Web UI" section endpoints
@@ -600,6 +629,121 @@ func (i ConfigResource) saveOptionsDeoVR(req *restful.Request, resp *restful.Res
 	config.SaveConfig()
 
 	resp.WriteHeaderAndEntity(http.StatusOK, r)
+}
+
+func (i ConfigResource) saveOptionsHandy(req *restful.Request, resp *restful.Response) {
+	var r RequestSaveOptionsHandy
+	err := req.ReadEntity(&r)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	config.Config.Interfaces.Handy.Enabled = r.Enabled
+	config.Config.Interfaces.Handy.ConnectionKey = r.ConnectionKey
+	config.Config.Interfaces.Handy.LatencyMs = r.LatencyMs
+	config.SaveConfig()
+	log.WithFields(logrus.Fields{
+		"enabled":            r.Enabled,
+		"latency_ms":         r.LatencyMs,
+		"connection_key_set": r.ConnectionKey != "",
+	}).Info("Saved Handy integration options")
+
+	resp.WriteHeaderAndEntity(http.StatusOK, r)
+}
+
+func (i ConfigResource) getHandyStatus(req *restful.Request, resp *restful.Response) {
+	out := HandyStatusResponse{
+		Enabled:          config.Config.Interfaces.Handy.Enabled,
+		ConnectionKeySet: config.Config.Interfaces.Handy.ConnectionKey != "",
+		CheckedAt:        time.Now(),
+	}
+
+	if !out.Enabled {
+		out.Message = "disabled"
+		log.Debug("Handy status check skipped: integration disabled")
+		resp.WriteHeaderAndEntity(http.StatusOK, out)
+		return
+	}
+
+	if !out.ConnectionKeySet {
+		out.Message = "connection key missing"
+		log.Warn("Handy status check skipped: connection key missing")
+		resp.WriteHeaderAndEntity(http.StatusOK, out)
+		return
+	}
+
+	client := resty.New().
+		SetTimeout(5*time.Second).
+		SetHeader("X-Connection-Key", config.Config.Interfaces.Handy.ConnectionKey)
+
+	connectedResp, err := client.R().Get("https://www.handyfeeling.com/api/handy/v2/connected")
+	if err != nil {
+		out.Error = err.Error()
+		out.Message = "connection check failed"
+		log.WithError(err).Warn("Handy connected check failed")
+		resp.WriteHeaderAndEntity(http.StatusOK, out)
+		return
+	}
+
+	if !connectedResp.IsSuccess() {
+		out.Error = connectedResp.Status()
+		out.Message = "connection check failed"
+		log.WithField("status", connectedResp.Status()).Warn("Handy connected check failed")
+		resp.WriteHeaderAndEntity(http.StatusOK, out)
+		return
+	}
+
+	connectedBody := gjson.Parse(connectedResp.String())
+	out.Connected = connectedBody.Get("connected").Bool()
+	if !connectedBody.Get("connected").Exists() {
+		out.Connected = connectedBody.Bool()
+	}
+	out.Message = "disconnected"
+	if out.Connected {
+		out.Message = "connected"
+	}
+
+	statusResp, err := client.R().Get("https://www.handyfeeling.com/api/handy/v2/status")
+	if err != nil {
+		out.Error = err.Error()
+		log.WithError(err).Warn("Handy status lookup failed")
+	} else if statusResp.IsSuccess() {
+		statusBody := gjson.Parse(statusResp.String())
+		out.Mode = statusBody.Get("mode").String()
+		log.WithFields(logrus.Fields{
+			"connected": out.Connected,
+			"mode":      out.Mode,
+			"status":    statusBody.Get("status").Int(),
+		}).Info("Checked Handy status")
+	} else {
+		out.Error = statusResp.Status()
+		log.WithField("status", statusResp.Status()).Warn("Handy status lookup failed")
+	}
+
+	resp.WriteHeaderAndEntity(http.StatusOK, out)
+}
+
+func (i ConfigResource) removeHandyScript(req *restful.Request, resp *restful.Response) {
+	if !config.Config.Interfaces.Handy.Enabled || config.Config.Interfaces.Handy.ConnectionKey == "" {
+		resp.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if connected, err := handyConnected(config.Config.Interfaces.Handy.ConnectionKey); err != nil {
+		log.WithError(err).Warn("Handy connected check failed before removing script")
+	} else if !connected {
+		log.Warn("Handy reported disconnected before removing script")
+	}
+
+	if err := handyStopScript(config.Config.Interfaces.Handy.ConnectionKey); err != nil {
+		log.WithError(err).Warn("failed to stop Handy script")
+		resp.WriteHeader(http.StatusBadGateway)
+		return
+	}
+
+	log.Info("Stopped Handy script")
+	resp.WriteHeaderAndEntity(http.StatusOK, HandyRemoveScriptResponse{Stopped: true})
 }
 
 func (i ConfigResource) listStorage(req *restful.Request, resp *restful.Response) {

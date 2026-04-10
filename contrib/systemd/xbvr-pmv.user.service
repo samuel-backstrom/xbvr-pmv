@@ -1,0 +1,15 @@
+[Unit]
+Description=XBVR PMV server
+After=default.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/samuel/.local/share/xbvr-pmv-wsl
+Environment=HOME=/home/samuel
+ExecStart=/home/samuel/.local/share/xbvr-pmv-wsl/xbvr-server -app_dir /home/samuel/.local/share/xbvr-pmv-wsl
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
