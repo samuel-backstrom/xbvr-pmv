@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="is-divider" data-content="Saved searches" style="margin-top:0.8em;"></div>
+    <div class="is-divider" data-content="Saved searches"></div>
 
      <SavedSearch/> 
 
@@ -561,6 +561,6 @@ export default {
   width: 80px;
 }
 .slider {
-  margin-right: "3em";
+  margin-right: 3em;
 }
 </style>
