@@ -147,29 +147,82 @@ export default {
 
   /* Buttons */
   .button {
+    background-color: var(--bg-surface) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-primary) !important;
     border-radius: var(--radius-sm) !important;
     transition: all var(--transition-fast) !important;
     font-weight: 500;
   }
+  .button:hover {
+    background-color: var(--bg-card-hover) !important;
+    border-color: var(--border-light) !important;
+    color: var(--text-primary) !important;
+  }
   .button.is-primary {
     background-color: var(--accent-primary) !important;
     border-color: var(--accent-primary) !important;
+    color: #fff !important;
   }
   .button.is-primary:hover {
     background-color: var(--accent-primary-hover) !important;
     border-color: var(--accent-primary-hover) !important;
+    color: #fff !important;
     box-shadow: 0 4px 12px rgba(108, 92, 231, 0.4) !important;
+  }
+  .button.is-primary.is-outlined {
+    background-color: transparent !important;
+    border-color: var(--accent-primary) !important;
+    color: var(--accent-primary) !important;
+  }
+  .button.is-primary.is-outlined:hover {
+    background-color: var(--accent-primary) !important;
+    color: #fff !important;
   }
   .button.is-info {
     background-color: var(--accent-info) !important;
     border-color: var(--accent-info) !important;
+    color: #fff !important;
   }
-  .button.is-light, .button.is-outlined {
+  .button.is-info.is-outlined {
+    background-color: transparent !important;
+    border-color: var(--accent-info) !important;
+    color: var(--accent-info) !important;
+  }
+  .button.is-info.is-outlined:hover {
+    background-color: var(--accent-info) !important;
+    color: #fff !important;
+  }
+  .button.is-danger {
+    background-color: var(--accent-danger) !important;
+    border-color: var(--accent-danger) !important;
+    color: #fff !important;
+  }
+  .button.is-danger.is-outlined {
+    background-color: transparent !important;
+    border-color: var(--accent-danger) !important;
+    color: var(--accent-danger) !important;
+  }
+  .button.is-danger.is-outlined:hover {
+    background-color: var(--accent-danger) !important;
+    color: #fff !important;
+  }
+  .button.is-success {
+    background-color: var(--accent-success) !important;
+    border-color: var(--accent-success) !important;
+    color: #fff !important;
+  }
+  .button.is-warning {
+    background-color: var(--accent-warning) !important;
+    border-color: var(--accent-warning) !important;
+    color: #1a1d27 !important;
+  }
+  .button.is-light {
     background-color: var(--bg-surface) !important;
     border-color: var(--border-color) !important;
     color: var(--text-primary) !important;
   }
-  .button.is-light:hover, .button.is-outlined:hover {
+  .button.is-light:hover {
     background-color: var(--bg-card-hover) !important;
     border-color: var(--border-light) !important;
   }
@@ -293,13 +346,36 @@ export default {
   .dropdown-content, .menu {
     background-color: var(--bg-card) !important;
     border-radius: var(--radius-md) !important;
+    border: 1px solid var(--border-color) !important;
+    box-shadow: var(--shadow-lg) !important;
   }
-  .dropdown-item, .dropdown .dropdown-menu .has-link a {
+  .dropdown-menu {
+    z-index: 40;
+  }
+  .dropdown-item,
+  .dropdown .dropdown-menu .has-link a,
+  a.dropdown-item,
+  button.dropdown-item,
+  .dropdown-content .dropdown-item {
     color: var(--text-primary) !important;
+    background-color: transparent !important;
   }
-  .dropdown-item:hover, .dropdown-item.is-active {
+  .dropdown-item:hover,
+  .dropdown-item.is-active,
+  a.dropdown-item:hover,
+  a.dropdown-item.is-active,
+  .dropdown-content .dropdown-item:hover {
     background-color: var(--bg-surface) !important;
     color: var(--accent-info) !important;
+  }
+  .dropdown-divider {
+    background-color: var(--border-color) !important;
+  }
+
+  /* Select option elements (native browser) */
+  .select select option {
+    background-color: var(--bg-card);
+    color: var(--text-primary);
   }
   .menu-list a {
     color: var(--text-secondary) !important;
@@ -400,11 +476,26 @@ export default {
     border: 1px solid var(--border-color) !important;
     border-radius: var(--radius-md) !important;
   }
-  .autocomplete .dropdown-item {
+  .autocomplete .dropdown-item,
+  .autocomplete .dropdown-content > .dropdown-item {
+    color: var(--text-primary) !important;
+    background-color: transparent !important;
+  }
+  .autocomplete .dropdown-item:hover,
+  .autocomplete .dropdown-item.is-hovered,
+  .autocomplete .dropdown-content > .dropdown-item:hover {
+    background-color: var(--bg-surface) !important;
     color: var(--text-primary) !important;
   }
-  .autocomplete .dropdown-item:hover, .autocomplete .dropdown-item.is-hovered {
-    background-color: var(--bg-surface) !important;
+  /* Media content inside dropdowns (QuickFind results etc.) */
+  .autocomplete .media-content,
+  .autocomplete .media-content strong,
+  .autocomplete .media-content small,
+  .autocomplete .media-right {
+    color: var(--text-primary) !important;
+  }
+  .autocomplete .media-content small {
+    color: var(--text-secondary) !important;
   }
 
   /* Carousel */
@@ -491,5 +582,34 @@ export default {
   .field.has-addons > .label {
     background-color: var(--bg-primary);
     padding: 0 4px;
+  }
+
+  /* Modal close button */
+  .modal-close::before, .modal-close::after,
+  .delete::before, .delete::after {
+    background-color: var(--text-primary) !important;
+  }
+  .modal-close, .delete {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+  }
+  .modal-close:hover, .delete:hover {
+    background-color: rgba(255, 255, 255, 0.2) !important;
+  }
+
+  /* Tag close/delete button */
+  .tag .delete {
+    background-color: transparent !important;
+  }
+
+  /* Buefy number input */
+  .b-numberinput .button {
+    background-color: var(--bg-surface) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-primary) !important;
+  }
+
+  /* Icon color inside buttons */
+  .button .icon {
+    color: inherit !important;
   }
 </style>
