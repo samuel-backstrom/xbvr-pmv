@@ -9,6 +9,10 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:9999',
       '/img': 'http://localhost:9999',
+      '/ws': {
+        target: 'http://localhost:9999',
+        ws: true,
+      },
     },
   },
   build: {

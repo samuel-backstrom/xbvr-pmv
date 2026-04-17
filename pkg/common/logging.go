@@ -41,7 +41,7 @@ func (hook *WampHook) Fire(entry *logrus.Entry) error {
 		"level":     entry.Level.String(),
 		"message":   entry.Message,
 		"data":      entry.Data,
-		"timestamp": entry.Time.String(),
+		"timestamp": entry.Time.Format(time.RFC3339Nano),
 	})
 	if err != nil {
 		return err

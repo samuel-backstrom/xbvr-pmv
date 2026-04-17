@@ -4,6 +4,7 @@ import {
   SlidersHorizontal, ChevronDown, ArrowUpDown, X, Star,
 } from 'lucide-react'
 import ActorCard from '../components/ActorCard'
+import { useAppStore } from '../store'
 import { getActors, getActorFilters, type Actor } from '../api/client'
 
 type SortOption = { label: string; field: string; dir: string }
@@ -22,6 +23,7 @@ const CARD_SIZES = [
 ]
 
 export default function Actors() {
+  const actorListRevision = useAppStore((s) => s.actorListRevision)
   const [actors, setActors] = useState<Actor[]>([])
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
@@ -49,13 +51,13 @@ export default function Actors() {
       if (ratingFilter > 0) params.rating = ratingFilter
 
       const data = await getActors(params)
-      setActors(data.results || [])
-      setTotal(data.total || 0)
+      setActors(data.actors || [])
+      setTotal(data.results || 0)
     } catch {
       setActors([])
     }
     setLoading(false)
-  }, [sort, page, limit, ratingFilter])
+  }, [sort, page, limit, ratingFilter, actorListRevision])
 
   useEffect(() => {
     fetchActors()

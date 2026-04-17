@@ -37,6 +37,7 @@ type PMVHavenVideoMetadata struct {
 	ThumbnailURL string `json:"thumbnail_url"`
 	Channel      string `json:"channel,omitempty"`
 	Description  string `json:"description,omitempty"`
+	FunscriptURL string `json:"funscript_url,omitempty"`
 	MediaURL     string `json:"media_url"`
 	Filename     string `json:"filename"`
 }
@@ -80,6 +81,7 @@ func FetchPMVHavenVideoMetadata(sceneURL string) (PMVHavenVideoMetadata, error) 
 		ThumbnailURL: ParsePMVHavenSceneHTMLForThumbnail(htmlBody),
 		Channel:      ParsePMVHavenSceneHTMLForChannel(htmlBody),
 		Description:  ParsePMVHavenSceneHTMLForDescription(htmlBody),
+		FunscriptURL: ParsePMVHavenSceneHTMLForFunscriptURL(htmlBody),
 		MediaURL:     mediaURL,
 		Filename:     filename,
 	}, nil
@@ -291,6 +293,50 @@ func ParsePMVHavenSceneHTMLForMediaURL(htmlBody string) string {
 	return ""
 }
 
+func ParsePMVHavenSceneHTMLForFunscriptURL(htmlBody string) string {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlBody))
+	if err != nil {
+		return ""
+	}
+
+	candidates := make([]string, 0, 12)
+	addCandidate := func(raw string) {
+		raw = normalizePMVHavenFunscriptURL(raw)
+		if raw != "" {
+			candidates = append(candidates, raw)
+		}
+	}
+
+	doc.Find(`a[href], link[href], source[src], script[src], [data-url], [data-href], [data-src]`).Each(func(_ int, sel *goquery.Selection) {
+		for _, attr := range []string{"href", "src", "data-url", "data-href", "data-src"} {
+			if raw := strings.TrimSpace(attrVal(sel, attr)); raw != "" {
+				addCandidate(raw)
+			}
+		}
+	})
+
+	for _, re := range []*regexp.Regexp{
+		regexp.MustCompile(`https:\\u002F\\u002F[^"'<\s]+`),
+		regexp.MustCompile(`https://[^"'<\s]+`),
+		regexp.MustCompile(`\/[^"'<\s]*(?:funscripts|csv)[^"'<\s]*`),
+	} {
+		matches := re.FindAllString(htmlBody, -1)
+		for _, match := range matches {
+			addCandidate(match)
+		}
+	}
+
+	seen := map[string]bool{}
+	for _, candidate := range candidates {
+		if candidate == "" || seen[candidate] {
+			continue
+		}
+		seen[candidate] = true
+		return candidate
+	}
+	return ""
+}
+
 func parsePMVHavenSceneJSONLDMediaURL(htmlBody string) string {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlBody))
 	if err != nil {
@@ -476,6 +522,35 @@ func normalizePMVHavenMediaURL(raw string) string {
 		return ""
 	}
 	return raw
+}
+
+func normalizePMVHavenFunscriptURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if unquoted, err := strconv.Unquote(`"` + raw + `"`); err == nil {
+		raw = unquoted
+	}
+	raw = strings.ReplaceAll(raw, `\u002F`, `/`)
+	raw = html.UnescapeString(raw)
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+
+	abs := absoluteURL(raw)
+	u, err := url.Parse(abs)
+	if err != nil {
+		return ""
+	}
+
+	pathLower := strings.ToLower(u.Path)
+	if !strings.Contains(pathLower, "/funscripts/") && !strings.HasSuffix(pathLower, ".csv") && !strings.HasSuffix(pathLower, ".funscript") {
+		return ""
+	}
+	u.Fragment = ""
+	return u.String()
 }
 
 func parsePMVHavenSceneCanonicalURL(doc *goquery.Document) string {

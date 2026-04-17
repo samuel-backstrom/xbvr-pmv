@@ -55,7 +55,8 @@
 
       <p>
         Import a PMVHaven video by URL. This downloads the video into the path prefix,
-        creates the PMV scene with title/thumbnail metadata, and then generates a funscript.
+        creates the PMV scene with title/thumbnail metadata, and then imports a PMVHaven
+        funscript when one is available.
       </p>
 
       <b-field label="PMVHaven video URL">
@@ -64,7 +65,7 @@
 
       <b-field>
         <b-button type="is-primary" @click="importPMVVideo" :disabled="!importURL">
-          Download PMV, create scene, and generate funscript
+          Download PMV, create scene, and import funscript if available
         </b-button>
       </b-field>
 
@@ -73,7 +74,7 @@
       <p>
         Import a ranked PMVHaven list or profile URL. This crawls available results,
         downloads videos in parallel, skips any video file that already exists, creates scenes,
-        and generates funscripts.
+        and imports PMVHaven funscripts when available.
       </p>
 
       <b-field label="PMVHaven list URL">

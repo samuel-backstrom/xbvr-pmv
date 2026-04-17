@@ -1,6 +1,12 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  safelist: [
+    {
+      pattern: /(bg|text|border|ring|shadow|from|to|via)-(cyber-(pink|amber|teal|blue|red)|accent)(\/(5|10|15|20|25|30|40|50|60))?/,
+      variants: ['hover', 'focus'],
+    },
+  ],
   theme: {
     extend: {
       colors: {

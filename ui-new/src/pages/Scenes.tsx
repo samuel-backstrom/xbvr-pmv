@@ -5,6 +5,7 @@ import {
   ArrowUpDown, Eye, Heart, Bookmark, Scroll, Star,
 } from 'lucide-react'
 import SceneCard from '../components/SceneCard'
+import { useAppStore } from '../store'
 import {
   getScenes, getSceneFilters, type Scene, type FilterOptions,
 } from '../api/client'
@@ -30,6 +31,7 @@ type ListFilter = 'watchlist' | 'favourite' | 'wishlist' | null
 type AvailFilter = 'available' | 'downloaded' | null
 
 export default function Scenes() {
+  const sceneListRevision = useAppStore((s) => s.sceneListRevision)
   const [scenes, setScenes] = useState<Scene[]>([])
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
@@ -89,7 +91,7 @@ export default function Scenes() {
       setScenes([])
     }
     setLoading(false)
-  }, [sort, page, limit, selectedSites, selectedTags, selectedCast, listFilter, availFilter, isScripted, isWatched, ratingFilter])
+  }, [sort, page, limit, selectedSites, selectedTags, selectedCast, listFilter, availFilter, isScripted, isWatched, ratingFilter, sceneListRevision])
 
   useEffect(() => {
     fetchScenes()

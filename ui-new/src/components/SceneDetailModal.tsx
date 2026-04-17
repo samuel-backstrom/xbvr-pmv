@@ -11,6 +11,7 @@ import { format, parseISO } from 'date-fns'
 export default function SceneDetailModal() {
   const scene = useAppStore((s) => s.selectedScene)
   const close = useAppStore((s) => s.closeSceneDetail)
+  const bumpSceneListRevision = useAppStore((s) => s.bumpSceneListRevision)
   const [detail, setDetail] = useState<Scene | null>(null)
   const [imgIdx, setImgIdx] = useState(0)
   const [hoveredStar, setHoveredStar] = useState(0)
@@ -44,6 +45,7 @@ export default function SceneDetailModal() {
     try {
       await rateScene(item.id, rating)
       setDetail((d) => d ? { ...d, star_rating: rating } : d)
+      bumpSceneListRevision()
     } catch {}
   }
 

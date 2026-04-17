@@ -21,6 +21,7 @@ export default function ActorDetailModal() {
   const actor = useAppStore((s) => s.selectedActor)
   const close = useAppStore((s) => s.closeActorDetail)
   const openScene = useAppStore((s) => s.openSceneDetail)
+  const bumpActorListRevision = useAppStore((s) => s.bumpActorListRevision)
   const [detail, setDetail] = useState<Actor | null>(null)
   const [hoveredStar, setHoveredStar] = useState(0)
 
@@ -58,6 +59,7 @@ export default function ActorDetailModal() {
     try {
       await rateActor(item.id, rating)
       setDetail((d) => d ? { ...d, star_rating: rating } : d)
+      bumpActorListRevision()
     } catch {}
   }
 

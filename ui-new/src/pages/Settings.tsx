@@ -11,6 +11,7 @@ import {
   type Volume, type StorageResponse,
 } from '../api/client'
 import { formatDistanceToNow, parseISO } from 'date-fns'
+import { useAppStore } from '../store'
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B'
@@ -21,6 +22,9 @@ function formatBytes(bytes: number): string {
 }
 
 function StorageTab() {
+  const storageRevision = useAppStore((s) => s.storageRevision)
+  const lockRescan = useAppStore((s) => s.lockRescan)
+  const lastRescanMessage = useAppStore((s) => s.lastRescanMessage)
   const [volumes, setVolumes] = useState<Volume[]>([])
   const [loading, setLoading] = useState(true)
   const [newPath, setNewPath] = useState('')
@@ -53,7 +57,7 @@ function StorageTab() {
 
   useEffect(() => {
     loadStorage()
-  }, [loadStorage])
+  }, [loadStorage, storageRevision])
 
   const showMessage = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text })
@@ -188,16 +192,27 @@ function StorageTab() {
         </motion.div>
       )}
 
+      {lastRescanMessage && (
+        <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm border ${
+          lockRescan
+            ? 'bg-cyber-amber/10 text-cyber-amber border-cyber-amber/20'
+            : 'bg-surface-800/50 text-surface-300 border-surface-700/30'
+        }`}>
+          <RefreshCw className={`w-4 h-4 ${lockRescan ? 'animate-spin' : ''}`} />
+          <span>{lastRescanMessage.message}</span>
+        </div>
+      )}
+
       {/* Header with rescan all */}
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-surface-100">Storage</h3>
         <button
           onClick={handleRescanAll}
-          disabled={rescanningAll}
+          disabled={rescanningAll || lockRescan}
           className="btn-primary text-sm flex items-center gap-2"
         >
-          <RefreshCw className={`w-4 h-4 ${rescanningAll ? 'animate-spin' : ''}`} />
-          {rescanningAll ? 'Rescanning...' : 'Rescan all folders'}
+          <RefreshCw className={`w-4 h-4 ${(rescanningAll || lockRescan) ? 'animate-spin' : ''}`} />
+          {lockRescan ? 'Rescan running...' : rescanningAll ? 'Rescanning...' : 'Rescan all folders'}
         </button>
       </div>
 
@@ -246,11 +261,11 @@ function StorageTab() {
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => handleRescan(vol.id)}
-                          disabled={rescanning === vol.id}
+                          disabled={rescanning === vol.id || lockRescan}
                           className="p-1.5 rounded-lg hover:bg-surface-700/50 text-surface-400 hover:text-surface-200 transition-colors"
                           title="Rescan folder"
                         >
-                          <RefreshCw className={`w-3.5 h-3.5 ${rescanning === vol.id ? 'animate-spin' : ''}`} />
+                          <RefreshCw className={`w-3.5 h-3.5 ${(rescanning === vol.id || lockRescan) ? 'animate-spin' : ''}`} />
                         </button>
                         {confirmRemove === vol.id ? (
                           <div className="flex items-center gap-1">
@@ -457,7 +472,177 @@ function StorageTab() {
   )
 }
 
+function CacheTab() {
+  const [loading, setLoading] = useState(true)
+  const [cacheSize, setCacheSize] = useState({ images: 0, previews: 0, searchIndex: 0 })
+  const [indexSceneCount, setIndexSceneCount] = useState(0)
+  const [indexInProgress, setIndexInProgress] = useState(false)
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  const showMessage = (type: 'success' | 'error', text: string) => {
+    setMessage({ type, text })
+    setTimeout(() => setMessage(null), 4000)
+  }
+
+  const loadState = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [stateRes, searchRes] = await Promise.all([
+        fetch('/api/options/state'),
+        fetch('/api/options/state/search'),
+      ])
+      const state = await stateRes.json()
+      const search = await searchRes.json()
+      setCacheSize(state.currentState?.cacheSize || { images: 0, previews: 0, searchIndex: 0 })
+      setIndexSceneCount(search.documentCount || 0)
+      setIndexInProgress(Boolean(search.inProgress))
+    } catch {}
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    loadState()
+  }, [loadState])
+
+  const resetCache = async (kind: 'images' | 'previews' | 'searchIndex', label: string) => {
+    try {
+      await fetch(`/api/options/cache/reset/${kind}`, { method: 'DELETE' })
+      showMessage('success', `${label} cache cleared`)
+      await loadState()
+    } catch {
+      showMessage('error', `Failed to clear ${label.toLowerCase()} cache`)
+    }
+  }
+
+  const rebuildIndex = async () => {
+    try {
+      await fetch('/api/task/index')
+      setIndexInProgress(true)
+      showMessage('success', 'Search index rebuild started')
+    } catch {
+      showMessage('error', 'Failed to start search index rebuild')
+    }
+  }
+
+  const refreshScenes = async () => {
+    try {
+      await fetch('/api/task/scene-refresh')
+      showMessage('success', 'Scene refresh started')
+    } catch {
+      showMessage('error', 'Failed to start scene refresh')
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {message && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm ${
+            message.type === 'success'
+              ? 'bg-cyber-teal/15 text-cyber-teal border border-cyber-teal/20'
+              : 'bg-cyber-red/15 text-cyber-red border border-cyber-red/20'
+          }`}
+        >
+          {message.type === 'success' ? <Check className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+          {message.text}
+        </motion.div>
+      )}
+
+      <div>
+        <h3 className="text-lg font-semibold text-surface-100">Cache management</h3>
+        <p className="text-sm text-surface-400 mt-1">
+          Reset cached assets and rebuild the search index when cache state gets stale.
+        </p>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between p-4 rounded-xl bg-surface-800/50 border border-surface-700/30">
+            <div>
+              <div className="text-sm font-medium text-surface-200">Image cache</div>
+              <div className="text-xs text-surface-500">Cached remote scene and actor artwork</div>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-xs text-surface-400 font-mono">{formatBytes(cacheSize.images)}</span>
+              <button
+                onClick={() => resetCache('images', 'Image')}
+                className="btn-ghost text-xs text-cyber-red hover:bg-cyber-red/10"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between p-4 rounded-xl bg-surface-800/50 border border-surface-700/30">
+            <div>
+              <div className="text-sm font-medium text-surface-200">Preview cache</div>
+              <div className="text-xs text-surface-500">Generated local previews and thumbnails</div>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-xs text-surface-400 font-mono">{formatBytes(cacheSize.previews)}</span>
+              <button
+                onClick={() => resetCache('previews', 'Preview')}
+                className="btn-ghost text-xs text-cyber-red hover:bg-cyber-red/10"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between p-4 rounded-xl bg-surface-800/50 border border-surface-700/30">
+            <div>
+              <div className="text-sm font-medium text-surface-200">Search index</div>
+              <div className="text-xs text-surface-500">
+                {indexInProgress ? 'Indexing in progress' : `${indexSceneCount.toLocaleString()} scenes indexed`}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-surface-400 font-mono">{formatBytes(cacheSize.searchIndex)}</span>
+              <button
+                onClick={() => resetCache('searchIndex', 'Search index')}
+                className="btn-ghost text-xs text-cyber-red hover:bg-cyber-red/10"
+              >
+                Reset
+              </button>
+              <button
+                onClick={rebuildIndex}
+                className="btn-ghost text-xs"
+              >
+                Rebuild
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between p-4 rounded-xl bg-surface-800/50 border border-surface-700/30">
+            <div>
+              <div className="text-sm font-medium text-surface-200">Scene status</div>
+              <div className="text-xs text-surface-500">Refresh availability and scripted status from assigned files</div>
+            </div>
+            <button
+              onClick={refreshScenes}
+              className="btn-ghost text-xs"
+            >
+              Refresh scenes
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Settings() {
+  const lockRescan = useAppStore((s) => s.lockRescan)
+  const lockScrape = useAppStore((s) => s.lockScrape)
+  const lastScrapeMessage = useAppStore((s) => s.lastScrapeMessage)
+  const runningScrapers = useAppStore((s) => s.runningScrapers)
   const [version, setVersion] = useState('')
   const [activeTab, setActiveTab] = useState('storage')
 
@@ -512,15 +697,19 @@ export default function Settings() {
             <h3 className="text-xs text-surface-500 uppercase tracking-wider font-medium">Quick actions</h3>
             <button
               onClick={() => fetch('/api/task/rescan')}
+              disabled={lockRescan}
               className="btn-primary w-full text-sm flex items-center justify-center gap-2"
             >
-              <RefreshCw className="w-4 h-4" /> Rescan library
+              <RefreshCw className={`w-4 h-4 ${lockRescan ? 'animate-spin' : ''}`} />
+              {lockRescan ? 'Rescan running...' : 'Rescan library'}
             </button>
             <button
-              onClick={() => fetch('/api/task/scrape', { method: 'POST' })}
+              onClick={() => fetch('/api/task/scrape')}
+              disabled={lockScrape}
               className="btn-ghost w-full text-sm flex items-center justify-center gap-2"
             >
-              <Globe className="w-4 h-4" /> Scrape sites
+              <Globe className="w-4 h-4" />
+              {lockScrape ? 'Scrape running...' : 'Scrape sites'}
             </button>
           </div>
         </div>
@@ -542,49 +731,33 @@ export default function Settings() {
                   Configure which sites to scrape for scene metadata. Access the full scraper
                   configuration through the main XBVR options panel.
                 </p>
+                {lastScrapeMessage && (
+                  <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm border ${
+                    lockScrape
+                      ? 'bg-cyber-teal/10 text-cyber-teal border-cyber-teal/20'
+                      : 'bg-surface-800/50 text-surface-300 border-surface-700/30'
+                  }`}>
+                    <RefreshCw className={`w-4 h-4 ${lockScrape ? 'animate-spin' : ''}`} />
+                    <span>{lastScrapeMessage.message}</span>
+                    {runningScrapers.length > 0 && (
+                      <span className="ml-auto text-xs text-surface-500">
+                        {runningScrapers.length} running
+                      </span>
+                    )}
+                  </div>
+                )}
                 <button
-                  onClick={() => fetch('/api/task/scrape', { method: 'POST' })}
+                  onClick={() => fetch('/api/task/scrape')}
+                  disabled={lockScrape}
                   className="btn-primary text-sm flex items-center gap-2"
                 >
-                  <RefreshCw className="w-4 h-4" /> Run all scrapers
+                  <RefreshCw className={`w-4 h-4 ${lockScrape ? 'animate-spin' : ''}`} />
+                  {lockScrape ? 'Scrape running...' : 'Run all scrapers'}
                 </button>
               </div>
             )}
 
-            {activeTab === 'cache' && (
-              <div className="space-y-6">
-                <h3 className="text-lg font-semibold text-surface-100">Cache management</h3>
-                <p className="text-sm text-surface-400">
-                  Manage cached data including images and metadata.
-                </p>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-4 rounded-xl bg-surface-800/50 border border-surface-700/30">
-                    <div>
-                      <div className="text-sm font-medium text-surface-200">Image cache</div>
-                      <div className="text-xs text-surface-500">Cached scene and actor images</div>
-                    </div>
-                    <button
-                      onClick={() => fetch('/api/task/clean-cache', { method: 'POST' })}
-                      className="btn-ghost text-xs text-cyber-red hover:bg-cyber-red/10"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                  <div className="flex items-center justify-between p-4 rounded-xl bg-surface-800/50 border border-surface-700/30">
-                    <div>
-                      <div className="text-sm font-medium text-surface-200">Search index</div>
-                      <div className="text-xs text-surface-500">Full-text search index</div>
-                    </div>
-                    <button
-                      onClick={() => fetch('/api/task/index', { method: 'POST' })}
-                      className="btn-ghost text-xs"
-                    >
-                      Rebuild
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+            {activeTab === 'cache' && <CacheTab />}
 
             {activeTab === 'interface' && (
               <div className="space-y-6">

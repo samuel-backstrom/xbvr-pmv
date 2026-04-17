@@ -24,6 +24,8 @@ const (
 	maxPMVImportBatchConcurrency     = 10
 )
 
+const enablePMVImportFallbackGeneration = true
+
 type PMVImportRequest struct {
 	URL         string `json:"url,omitempty"`
 	ListURL     string `json:"list_url,omitempty"`
@@ -33,15 +35,16 @@ type PMVImportRequest struct {
 }
 
 type PMVImportResult struct {
-	URL                string `json:"url"`
-	SceneURL           string `json:"scene_url,omitempty"`
-	MediaURL           string `json:"media_url,omitempty"`
-	DownloadedPath     string `json:"downloaded_path,omitempty"`
-	FileID             uint   `json:"file_id,omitempty"`
-	SceneID            string `json:"scene_id,omitempty"`
-	FunscriptGenerated bool   `json:"funscript_generated,omitempty"`
-	Skipped            bool   `json:"skipped,omitempty"`
-	Message            string `json:"message,omitempty"`
+	URL                 string `json:"url"`
+	SceneURL            string `json:"scene_url,omitempty"`
+	MediaURL            string `json:"media_url,omitempty"`
+	DownloadedPath      string `json:"downloaded_path,omitempty"`
+	FileID              uint   `json:"file_id,omitempty"`
+	SceneID             string `json:"scene_id,omitempty"`
+	FunscriptGenerated  bool   `json:"funscript_generated,omitempty"`
+	FunscriptDownloaded bool   `json:"funscript_downloaded,omitempty"`
+	Skipped             bool   `json:"skipped,omitempty"`
+	Message             string `json:"message,omitempty"`
 }
 
 type PMVImportBatchItem struct {
@@ -179,7 +182,7 @@ func ImportPMVHavenList(req PMVImportRequest) (*PMVImportBatchResult, int, error
 			continue
 		}
 		batch.Imported++
-		if outcome.Result.FunscriptGenerated {
+		if outcome.Result.FunscriptGenerated || outcome.Result.FunscriptDownloaded {
 			batch.Funscripts++
 		}
 	}
@@ -258,31 +261,48 @@ func importSinglePMVHavenVideo(sceneURL string, runtime pmvImportRuntime) (*PMVI
 		return nil, http.StatusInternalServerError, err
 	}
 
-	pyResult, statusCode, err := GeneratePythonDancerFunscripts(PythonDancerBatchRequest{
-		FileID:          videoFile.ID,
-		Concurrency:     1,
-		ForceRegenerate: false,
-		PostProcessMode: postProcessModeAuto,
-	})
-	if err != nil {
-		return nil, statusCode, err
+	funscriptDownloaded := false
+	if strings.TrimSpace(videoMeta.FunscriptURL) != "" {
+		funscriptDownloaded, err = importPMVHavenFunscript(videoMeta, &videoFile)
+		if err != nil {
+			tlog.WithError(err).Warn("failed to import PMVHaven funscript")
+			funscriptDownloaded = false
+		}
 	}
 
-	funscriptGenerated := pyResult != nil && pyResult.Generated > 0 && pyResult.Errors == 0
-	message := "PMV imported, scene created, and funscript generated"
-	if !funscriptGenerated {
-		message = "PMV imported and scene created"
+	funscriptGenerated := false
+	message := "PMV imported and scene created"
+	if funscriptDownloaded {
+		message = "PMV imported, scene created, and PMVHaven funscript downloaded"
+	} else if enablePMVImportFallbackGeneration {
+		pyResult, statusCode, err := GeneratePythonDancerFunscripts(PythonDancerBatchRequest{
+			FileID:          videoFile.ID,
+			Concurrency:     1,
+			ForceRegenerate: false,
+			PostProcessMode: postProcessModeAuto,
+		})
+		if err != nil {
+			return nil, statusCode, err
+		}
+
+		funscriptGenerated = pyResult != nil && pyResult.Generated > 0 && pyResult.Errors == 0
+		if funscriptGenerated {
+			message = "PMV imported, scene created, and funscript generated"
+		}
+	} else {
+		message = "PMV imported and scene created (no PMVHaven funscript found)"
 	}
 
 	return &PMVImportResult{
-		URL:                sceneURL,
-		SceneURL:           videoMeta.SceneURL,
-		MediaURL:           videoMeta.MediaURL,
-		DownloadedPath:     destPath,
-		FileID:             videoFile.ID,
-		SceneID:            sceneID,
-		FunscriptGenerated: funscriptGenerated,
-		Message:            message,
+		URL:                 sceneURL,
+		SceneURL:            videoMeta.SceneURL,
+		MediaURL:            videoMeta.MediaURL,
+		DownloadedPath:      destPath,
+		FileID:              videoFile.ID,
+		SceneID:             sceneID,
+		FunscriptGenerated:  funscriptGenerated,
+		FunscriptDownloaded: funscriptDownloaded,
+		Message:             message,
 	}, http.StatusOK, nil
 }
 

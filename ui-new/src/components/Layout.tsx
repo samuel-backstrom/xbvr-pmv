@@ -3,6 +3,7 @@ import Sidebar from './Sidebar'
 import CommandPalette from './CommandPalette'
 import SceneDetailModal from './SceneDetailModal'
 import ActorDetailModal from './ActorDetailModal'
+import SocketBridge from './SocketBridge'
 import { useAppStore } from '../store'
 
 export default function Layout() {
@@ -10,6 +11,7 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen overflow-hidden">
+      <SocketBridge />
       <Sidebar />
       <main
         className={`flex-1 overflow-y-auto transition-all duration-300

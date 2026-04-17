@@ -238,6 +238,22 @@ func TestParsePMVHavenSceneHTMLForMediaURL(t *testing.T) {
 	}
 }
 
+func TestParsePMVHavenSceneHTMLForFunscriptURL(t *testing.T) {
+	html := `
+	<html><body>
+	  <section>
+	    <h3>Available FunScripts</h3>
+	    <a href="/funscripts/691042e7d251ba894380dfab/68feea914e81de92343a23b5_1766973029152_demo.csv">Download</a>
+	  </section>
+	</body></html>`
+
+	got := ParsePMVHavenSceneHTMLForFunscriptURL(html)
+	want := "https://pmvhaven.com/funscripts/691042e7d251ba894380dfab/68feea914e81de92343a23b5_1766973029152_demo.csv"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
 func TestParsePMVHavenSceneHTMLForMediaURL_PrefersDirectMP4OverHLS(t *testing.T) {
 	html := `
 	<html><body>

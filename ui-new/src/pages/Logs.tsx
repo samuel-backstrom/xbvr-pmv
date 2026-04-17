@@ -1,16 +1,10 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Terminal, Pause, Play, Trash2, ArrowDown, Search,
   AlertTriangle, Info, Bug, XCircle,
 } from 'lucide-react'
-
-interface LogEntry {
-  time: string
-  level: string
-  msg: string
-  [key: string]: any
-}
+import { useAppStore, type LogEntry } from '../store'
 
 const LEVEL_STYLES: Record<string, { bg: string; text: string; icon: any }> = {
   info: { bg: 'bg-cyber-blue/10', text: 'text-cyber-blue', icon: Info },
@@ -20,37 +14,20 @@ const LEVEL_STYLES: Record<string, { bg: string; text: string; icon: any }> = {
 }
 
 export default function Logs() {
-  const [logs, setLogs] = useState<LogEntry[]>([])
-  const [paused, setPaused] = useState(false)
-  const [search, setSearch] = useState('')
-  const [levelFilter, setLevelFilter] = useState<string>('all')
-  const [autoScroll, setAutoScroll] = useState(true)
+  const logs = useAppStore((s) => s.serviceLogs)
+  const clearServiceLogs = useAppStore((s) => s.clearServiceLogs)
+  const logConnectionStatus = useAppStore((s) => s.logConnectionStatus)
+  const paused = useAppStore((s) => s.logsPaused)
+  const pausedLogs = useAppStore((s) => s.pausedServiceLogs)
+  const search = useAppStore((s) => s.logsSearch)
+  const levelFilter = useAppStore((s) => s.logsLevelFilter)
+  const autoScroll = useAppStore((s) => s.logsAutoScroll)
+  const setLogsPaused = useAppStore((s) => s.setLogsPaused)
+  const setPausedServiceLogs = useAppStore((s) => s.setPausedServiceLogs)
+  const setLogsSearch = useAppStore((s) => s.setLogsSearch)
+  const setLogsLevelFilter = useAppStore((s) => s.setLogsLevelFilter)
+  const setLogsAutoScroll = useAppStore((s) => s.setLogsAutoScroll)
   const containerRef = useRef<HTMLDivElement>(null)
-  const wsRef = useRef<WebSocket | null>(null)
-
-  useEffect(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const ws = new WebSocket(`${protocol}//${window.location.host}/api/log`)
-    wsRef.current = ws
-
-    ws.onmessage = (event) => {
-      try {
-        const entry = JSON.parse(event.data) as LogEntry
-        setLogs((prev) => {
-          const next = [...prev, entry]
-          // Keep last 1000 entries
-          return next.length > 1000 ? next.slice(-1000) : next
-        })
-      } catch {}
-    }
-
-    ws.onerror = () => {}
-    ws.onclose = () => {}
-
-    return () => {
-      ws.close()
-    }
-  }, [])
 
   // Auto-scroll
   useEffect(() => {
@@ -59,13 +36,31 @@ export default function Logs() {
     }
   }, [logs, autoScroll, paused])
 
-  const filtered = logs.filter((log) => {
+  const sourceLogs = paused ? (pausedLogs || logs) : logs
+
+  const filtered = sourceLogs.filter((log) => {
     if (levelFilter !== 'all' && log.level !== levelFilter) return false
-    if (search && !log.msg.toLowerCase().includes(search.toLowerCase())) return false
+    if (search && !log.message.toLowerCase().includes(search.toLowerCase())) return false
     return true
   })
 
-  const displayLogs = paused ? filtered : filtered
+  const displayLogs = filtered
+
+  function togglePaused() {
+    if (paused) {
+      setLogsPaused(false)
+      setPausedServiceLogs(null)
+      return
+    }
+
+    setLogsPaused(true)
+    setPausedServiceLogs(logs)
+  }
+
+  function clearLogs() {
+    clearServiceLogs()
+    setPausedServiceLogs([])
+  }
 
   return (
     <div className="space-y-4 h-full flex flex-col">
@@ -74,11 +69,17 @@ export default function Logs() {
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-bold text-surface-100">Logs</h1>
           <span className="text-sm text-surface-500">{logs.length} entries</span>
-          {!paused && (
+          {!paused && logConnectionStatus === 'connected' && (
             <span className="flex items-center gap-1.5 text-xs text-cyber-teal">
               <span className="w-1.5 h-1.5 rounded-full bg-cyber-teal animate-pulse" />
               Live
             </span>
+          )}
+          {logConnectionStatus === 'connecting' && (
+            <span className="text-xs text-cyber-amber">Connecting…</span>
+          )}
+          {logConnectionStatus === 'disconnected' && (
+            <span className="text-xs text-cyber-red">Disconnected</span>
           )}
         </div>
 
@@ -88,7 +89,7 @@ export default function Logs() {
             <input
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => setLogsSearch(e.target.value)}
               placeholder="Filter logs..."
               className="input-dark pl-10 w-48 text-sm"
             />
@@ -98,7 +99,7 @@ export default function Logs() {
             {['all', 'info', 'warning', 'error', 'debug'].map((level) => (
               <button
                 key={level}
-                onClick={() => setLevelFilter(level)}
+                onClick={() => setLogsLevelFilter(level)}
                 className={`px-2.5 py-1.5 text-xs font-medium capitalize transition-colors
                   ${levelFilter === level ? 'bg-accent text-white' : 'text-surface-400 hover:text-surface-200 hover:bg-surface-700/50'}`}
               >
@@ -108,7 +109,7 @@ export default function Logs() {
           </div>
 
           <button
-            onClick={() => setPaused(!paused)}
+            onClick={togglePaused}
             className={`btn-ghost text-sm flex items-center gap-1.5 ${paused ? 'text-cyber-amber' : ''}`}
           >
             {paused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
@@ -116,14 +117,14 @@ export default function Logs() {
           </button>
 
           <button
-            onClick={() => setAutoScroll(!autoScroll)}
+            onClick={() => setLogsAutoScroll(!autoScroll)}
             className={`btn-ghost text-sm flex items-center gap-1.5 ${autoScroll ? 'text-accent' : ''}`}
           >
             <ArrowDown className="w-4 h-4" />
           </button>
 
           <button
-            onClick={() => setLogs([])}
+            onClick={clearLogs}
             className="btn-ghost text-sm flex items-center gap-1.5 text-surface-400 hover:text-cyber-red"
           >
             <Trash2 className="w-4 h-4" />
@@ -160,7 +161,7 @@ export default function Logs() {
                   }`}
                 >
                   <span className="text-surface-600 flex-shrink-0 w-20 pt-0.5">
-                    {log.time ? new Date(log.time).toLocaleTimeString() : '--:--:--'}
+                    {log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : '--:--:--'}
                   </span>
                   <span className={`flex-shrink-0 w-5 pt-0.5 ${style.text}`}>
                     <Icon className="w-3.5 h-3.5" />
@@ -168,7 +169,7 @@ export default function Logs() {
                   <span className={`flex-shrink-0 w-14 uppercase text-[10px] font-semibold pt-0.5 ${style.text}`}>
                     {log.level}
                   </span>
-                  <span className="text-surface-300 flex-1 break-all leading-relaxed">{log.msg}</span>
+                  <span className="text-surface-300 flex-1 break-all leading-relaxed">{log.message}</span>
                 </div>
               )
             })
@@ -177,7 +178,7 @@ export default function Logs() {
 
         {/* Footer */}
         <div className="flex items-center justify-between px-4 py-2 border-t border-surface-700/50 text-[11px] text-surface-500">
-          <span>{displayLogs.length} / {logs.length} entries</span>
+          <span>{displayLogs.length} / {sourceLogs.length} shown</span>
           <span>Max 1000 entries kept in memory</span>
         </div>
       </motion.div>
