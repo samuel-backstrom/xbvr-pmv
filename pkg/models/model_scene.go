@@ -329,7 +329,6 @@ func (o *Scene) UpdateStatus() {
 
 			if files[j].Type == "video" {
 				videos = videos + 1
-
 				if files[j].Exists() {
 					anyVideoAccessible = true
 
@@ -731,6 +730,26 @@ func QueryScenes(r RequestSceneList, enablePreload bool) ResponseSceneList {
 			Preload("Cuepoints")
 	}
 	finalTx.Find(&out.Scenes)
+
+	if enablePreload {
+		filtered := out.Scenes[:0]
+		for i := range out.Scenes {
+			scene := &out.Scenes[i]
+			hasAccessibleVideo := false
+			for j := range scene.Files {
+				if scene.Files[j].Type == "video" && scene.Files[j].Exists() {
+					hasAccessibleVideo = true
+					break
+				}
+			}
+			scene.IsAccessible = hasAccessibleVideo
+			if r.IsAccessible.Present() && scene.IsAccessible != r.IsAccessible.OrElse(true) {
+				continue
+			}
+			filtered = append(filtered, *scene)
+		}
+		out.Scenes = filtered
+	}
 
 	return out
 }

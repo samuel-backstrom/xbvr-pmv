@@ -77,7 +77,10 @@ export default function Scenes() {
       if (selectedTags.length > 0) params.tags = selectedTags
       if (selectedCast.length > 0) params.cast = selectedCast
       if (listFilter) params.list = listFilter
-      if (availFilter === 'available') params.is_available = true
+      if (availFilter === 'available') {
+        params.is_available = true
+        params.is_accessible = true
+      }
       if (availFilter === 'downloaded') params.is_accessible = true
       if (isScripted) params.is_scripted = true
       if (isWatched === true) params.is_watched = true

@@ -30,6 +30,7 @@ export interface Scene {
   tags: Tag[]
   file: SceneFile[]
   cuepoints: Cuepoint[]
+  score?: number
 }
 
 export interface Actor {
@@ -79,10 +80,12 @@ export interface SceneFile {
   filename: string
   size: number
   type: string
+  scene_id: number
   video_width: number
   video_height: number
   video_bitrate: number
   video_avg_frame_rate_val: number
+  duration: number
   has_heatmap: boolean
   is_selected_script: boolean
   created_time: string
@@ -262,6 +265,38 @@ export function getFiles(params: Record<string, any> = {}) {
   return request<SceneFile[]>('/api/files/list', {
     method: 'POST',
     body: JSON.stringify(body),
+  })
+}
+
+export function matchFile(fileId: number, sceneId: string) {
+  return request<void>('/api/files/match', {
+    method: 'POST',
+    body: JSON.stringify({ file_id: fileId, scene_id: sceneId }),
+  })
+}
+
+export function unmatchFile(fileId: number) {
+  return request<void>('/api/files/unmatch', {
+    method: 'POST',
+    body: JSON.stringify({ file_id: fileId }),
+  })
+}
+
+export function deleteFile(fileId: number) {
+  return request<void>(`/api/files/file/${fileId}`, {
+    method: 'DELETE',
+  })
+}
+
+export function createCustomScene(req: {
+  title: string
+  id?: string
+  filename?: string
+  pmvhaven_url?: string
+}) {
+  return request<Scene>('/api/scene/create', {
+    method: 'POST',
+    body: JSON.stringify(req),
   })
 }
 
