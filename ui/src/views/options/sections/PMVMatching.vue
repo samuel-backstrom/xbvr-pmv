@@ -100,6 +100,7 @@
 
 <script>
 import ky from 'ky'
+import { selectPMVImportVolume } from './pmvMatchingDefaults'
 
 export default {
   name: 'PMVMatching',
@@ -123,7 +124,20 @@ export default {
       importListConcurrency: 3
     }
   },
+  async mounted () {
+    await this.$store.dispatch('optionsStorage/load')
+    this.applyConfiguredVolumeDefaults()
+  },
   methods: {
+    applyConfiguredVolumeDefaults () {
+      const selection = selectPMVImportVolume(
+        this.$store.state.optionsStorage.items,
+        this.pathPrefix,
+        this.volumeId
+      )
+      this.pathPrefix = selection.pathPrefix
+      this.volumeId = selection.volumeId
+    },
     async startTask () {
       this.isLoading = true
       const searchParams = {

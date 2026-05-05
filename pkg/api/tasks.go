@@ -24,16 +24,6 @@ type RequestScrapeTPDB struct {
 	SceneUrl string `json:"sceneUrl"`
 }
 
-type RequestPythonDancerBatch struct {
-	Limit           int    `json:"limit"`
-	Concurrency     int    `json:"concurrency"`
-	VolumeID        uint   `json:"volume_id"`
-	PathPrefix      string `json:"path_prefix"`
-	FileID          uint   `json:"file_id"`
-	ForceRegenerate bool   `json:"force_regenerate"`
-	PostProcessMode string `json:"post_process_mode"`
-}
-
 type RequestSingleScrape struct {
 	Site           string                            `json:"site"`
 	SceneUrl       string                            `json:"sceneurl"`
@@ -143,13 +133,6 @@ func (i TaskResource) WebService() *restful.WebService {
 	ws.Route(ws.GET("/funscript/export-new").To(i.exportNewFunscripts).
 		Metadata(restfulspec.KeyOpenAPITags, tags))
 
-	ws.Route(ws.POST("/funscript/python-dancer").To(i.pythonDancerFunscripts).
-		Metadata(restfulspec.KeyOpenAPITags, tags).
-		Writes(tasks.PythonDancerBatchResult{}))
-
-	ws.Route(ws.GET("/funscript/python-dancer").To(i.pythonDancerFunscriptsTask).
-		Metadata(restfulspec.KeyOpenAPITags, tags))
-
 	ws.Route(ws.GET("/bundle/backup").To(i.backupBundle).
 		Metadata(restfulspec.KeyOpenAPITags, tags).
 		Writes(ResponseBackupBundle{}))
@@ -255,53 +238,6 @@ func (i TaskResource) exportAllFunscripts(req *restful.Request, resp *restful.Re
 
 func (i TaskResource) exportNewFunscripts(req *restful.Request, resp *restful.Response) {
 	tasks.ExportFunscripts(resp.ResponseWriter, true)
-}
-
-func (i TaskResource) pythonDancerFunscripts(req *restful.Request, resp *restful.Response) {
-	var r RequestPythonDancerBatch
-	if err := req.ReadEntity(&r); err != nil {
-		APIError(req, resp, http.StatusBadRequest, err)
-		return
-	}
-
-	result, statusCode, err := tasks.GeneratePythonDancerFunscripts(tasks.PythonDancerBatchRequest{
-		Limit:           r.Limit,
-		Concurrency:     r.Concurrency,
-		VolumeID:        r.VolumeID,
-		PathPrefix:      r.PathPrefix,
-		FileID:          r.FileID,
-		ForceRegenerate: r.ForceRegenerate,
-		PostProcessMode: r.PostProcessMode,
-	})
-	if err != nil {
-		APIError(req, resp, statusCode, err)
-		return
-	}
-	resp.WriteHeaderAndEntity(statusCode, result)
-}
-
-func (i TaskResource) pythonDancerFunscriptsTask(req *restful.Request, resp *restful.Response) {
-	limit, _ := strconv.Atoi(req.QueryParameter("limit"))
-	concurrency, _ := strconv.Atoi(req.QueryParameter("concurrency"))
-	volumeID64, _ := strconv.ParseUint(req.QueryParameter("volume_id"), 10, 64)
-	pathPrefix := strings.TrimSpace(req.QueryParameter("path_prefix"))
-	postProcessMode := strings.TrimSpace(req.QueryParameter("post_process_mode"))
-
-	startAPITask(req, resp, "python-dancer-funscripts", logrus.Fields{
-		"limit":             limit,
-		"concurrency":       concurrency,
-		"volume_id":         volumeID64,
-		"path_prefix":       pathPrefix,
-		"post_process_mode": postProcessMode,
-	}, func() {
-		tasks.RunPythonDancerFunscriptTask(tasks.PythonDancerBatchRequest{
-			Limit:           limit,
-			Concurrency:     concurrency,
-			VolumeID:        uint(volumeID64),
-			PathPrefix:      pathPrefix,
-			PostProcessMode: postProcessMode,
-		})
-	})
 }
 
 func (i TaskResource) pmvImport(req *restful.Request, resp *restful.Response) {

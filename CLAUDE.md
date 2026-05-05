@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is XBVR
 
-XBVR is a VR video library manager. It scrapes metadata from adult VR sites, matches local video files to that metadata, and serves content to VR players (DeoVR, HereSphere) via REST API and DLNA. This fork adds PMV (Porn Music Video) support with audio-based funscript generation via the PythonDancer submodule.
+XBVR is a VR video library manager. It scrapes metadata from adult VR sites, matches local video files to that metadata, and serves content to VR players (DeoVR, HereSphere) via REST API and DLNA. This fork adds PMV (Porn Music Video) metadata matching and PMVHaven import support.
 
 ## Development Commands
 
@@ -42,10 +42,6 @@ Without `-app_dir`, data is stored in the default config directory. Do not use `
 
 - **`ui-new/`** — Primary UI: React 18 + TypeScript + Vite + TailwindCSS + Zustand state management
 - **`ui/`** — Legacy Vue 2 UI (deprecated, still buildable via `yarn build:old-ui`)
-
-### PythonDancer Submodule
-
-Git submodule at `PythonDancer/` — generates funscripts from audio via beat detection. Integrated with Go backend through subprocess calls in `pkg/tasks/python_dancer.go`.
 
 ## Key Patterns
 

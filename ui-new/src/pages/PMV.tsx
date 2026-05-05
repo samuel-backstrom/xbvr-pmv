@@ -270,8 +270,7 @@ export default function PMV() {
         meta: [
           result.scene_id ? { label: 'scene', value: result.scene_id } : null,
           result.file_id ? { label: 'file', value: String(result.file_id) } : null,
-          result.funscript_generated ? { label: 'funscript', value: 'generated' }
-            : result.funscript_downloaded ? { label: 'funscript', value: 'downloaded' } : null,
+          result.funscript_downloaded ? { label: 'funscript', value: 'downloaded' } : null,
         ].filter(Boolean) as { label: string; value: string | number }[],
       })
     } catch {
@@ -311,7 +310,7 @@ export default function PMV() {
         meta: [
           { label: 'imported', value: result.imported },
           { label: 'skipped', value: result.skipped_existing },
-          { label: 'funscripts', value: result.funscripts_generated },
+          { label: 'funscripts', value: result.funscripts_imported },
           { label: 'errors', value: result.errors },
         ],
       })
@@ -803,8 +802,7 @@ function SingleResultCard({ result }: { result: PMVImportResult }) {
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3">
             {result.scene_id && <Stat label="Scene ID" value={result.scene_id} mono />}
             {result.file_id ? <Stat label="File ID" value={String(result.file_id)} mono /> : null}
-            {result.funscript_generated && <Stat label="Funscript" value="generated" />}
-            {!result.funscript_generated && result.funscript_downloaded && <Stat label="Funscript" value="downloaded" />}
+            {result.funscript_downloaded && <Stat label="Funscript" value="downloaded" />}
           </div>
           {result.downloaded_path && (
             <div className="mt-3 text-[11px] text-surface-500 font-mono break-all">
@@ -832,7 +830,7 @@ function BatchResultCard({ result }: { result: PMVImportBatchResult }) {
   const stats = [
     { label: 'Imported', value: result.imported, tone: 'cyber-teal' },
     { label: 'Skipped', value: result.skipped_existing, tone: 'cyber-amber' },
-    { label: 'Funscripts', value: result.funscripts_generated, tone: 'cyber-pink' },
+    { label: 'Funscripts', value: result.funscripts_imported, tone: 'cyber-pink' },
     { label: 'Errors', value: result.errors, tone: 'cyber-red' },
   ]
 

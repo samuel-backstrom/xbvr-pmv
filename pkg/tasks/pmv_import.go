@@ -24,8 +24,6 @@ const (
 	maxPMVImportBatchConcurrency     = 10
 )
 
-const enablePMVImportFallbackGeneration = true
-
 type PMVImportRequest struct {
 	URL         string `json:"url,omitempty"`
 	ListURL     string `json:"list_url,omitempty"`
@@ -41,7 +39,6 @@ type PMVImportResult struct {
 	DownloadedPath      string `json:"downloaded_path,omitempty"`
 	FileID              uint   `json:"file_id,omitempty"`
 	SceneID             string `json:"scene_id,omitempty"`
-	FunscriptGenerated  bool   `json:"funscript_generated,omitempty"`
 	FunscriptDownloaded bool   `json:"funscript_downloaded,omitempty"`
 	Skipped             bool   `json:"skipped,omitempty"`
 	Message             string `json:"message,omitempty"`
@@ -60,7 +57,7 @@ type PMVImportBatchResult struct {
 	Queued          int                  `json:"queued"`
 	Imported        int                  `json:"imported"`
 	SkippedExisting int                  `json:"skipped_existing"`
-	Funscripts      int                  `json:"funscripts_generated"`
+	Funscripts      int                  `json:"funscripts_imported"`
 	Errors          int                  `json:"errors"`
 	Results         []PMVImportBatchItem `json:"results"`
 }
@@ -182,7 +179,7 @@ func ImportPMVHavenList(req PMVImportRequest) (*PMVImportBatchResult, int, error
 			continue
 		}
 		batch.Imported++
-		if outcome.Result.FunscriptGenerated || outcome.Result.FunscriptDownloaded {
+		if outcome.Result.FunscriptDownloaded {
 			batch.Funscripts++
 		}
 	}
@@ -270,25 +267,9 @@ func importSinglePMVHavenVideo(sceneURL string, runtime pmvImportRuntime) (*PMVI
 		}
 	}
 
-	funscriptGenerated := false
 	message := "PMV imported and scene created"
 	if funscriptDownloaded {
 		message = "PMV imported, scene created, and PMVHaven funscript downloaded"
-	} else if enablePMVImportFallbackGeneration {
-		pyResult, statusCode, err := GeneratePythonDancerFunscripts(PythonDancerBatchRequest{
-			FileID:          videoFile.ID,
-			Concurrency:     1,
-			ForceRegenerate: false,
-			PostProcessMode: postProcessModeAuto,
-		})
-		if err != nil {
-			return nil, statusCode, err
-		}
-
-		funscriptGenerated = pyResult != nil && pyResult.Generated > 0 && pyResult.Errors == 0
-		if funscriptGenerated {
-			message = "PMV imported, scene created, and funscript generated"
-		}
 	} else {
 		message = "PMV imported and scene created (no PMVHaven funscript found)"
 	}
@@ -300,7 +281,6 @@ func importSinglePMVHavenVideo(sceneURL string, runtime pmvImportRuntime) (*PMVI
 		DownloadedPath:      destPath,
 		FileID:              videoFile.ID,
 		SceneID:             sceneID,
-		FunscriptGenerated:  funscriptGenerated,
 		FunscriptDownloaded: funscriptDownloaded,
 		Message:             message,
 	}, http.StatusOK, nil
