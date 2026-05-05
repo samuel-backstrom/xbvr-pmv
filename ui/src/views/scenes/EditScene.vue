@@ -99,11 +99,6 @@
 
           <b-tab-item :label="$t('Funscripts')">
             <div class="content">
-              <p>
-                Force regenerate `.funscript` files for the scene videos using PythonDancer.
-                Choose whether to force post-processing or skip it entirely.
-              </p>
-
               <div v-if="videoFiles.length === 0" class="notification is-light">
                 No video files are linked to this scene.
               </div>
@@ -115,22 +110,6 @@
                     <p class="is-size-7 has-text-grey">{{ file.path }}</p>
                   </div>
                   <div class="buttons are-small">
-                    <b-button
-                      type="is-primary"
-                      icon-left="pulse"
-                      :loading="regenFileId === file.id && regenMode === 'always'"
-                      @click="regenerateFunscript(file, 'always')"
-                    >
-                      Regenerate with post-processing
-                    </b-button>
-                    <b-button
-                      type="is-light"
-                      icon-left="pulse"
-                      :loading="regenFileId === file.id && regenMode === 'never'"
-                      @click="regenerateFunscript(file, 'never')"
-                    >
-                      Regenerate without post-processing
-                    </b-button>
                     <b-button
                       type="is-info"
                       icon-left="folder-open"
@@ -284,8 +263,6 @@ export default {
       filteredCast: [],
       filteredTags: [],
       changesMade: false,
-      regenFileId: 0,
-      regenMode: '',
       thumbFileId: 0,
       showFunscriptPicker: false,
       funscriptPickerVideoFile: null,
@@ -525,43 +502,6 @@ export default {
         })
       } finally {
         this.thumbFileId = 0
-      }
-    },
-    async regenerateFunscript (file, postProcessMode) {
-      if (!file || !file.id || this.regenFileId) {
-        return
-      }
-      this.regenFileId = file.id
-      this.regenMode = postProcessMode
-      try {
-        const result = await ky.post('/api/task/funscript/python-dancer', {
-          json: {
-            file_id: file.id,
-            force_regenerate: true,
-            post_process_mode: postProcessMode
-          },
-          timeout: false
-        }).json()
-
-        const item = result && result.results && result.results.length ? result.results[0] : null
-        this.$buefy.toast.open({
-          message: item && item.error ? item.error : 'Funscript regenerated.',
-          type: item && item.error ? 'is-danger' : 'is-success',
-          duration: item && item.error ? 6000 : 4000
-        })
-
-        if (!item || !item.error) {
-          await this.refreshSceneData(false)
-        }
-      } catch (error) {
-        this.$buefy.toast.open({
-          message: 'Failed to regenerate funscript.',
-          type: 'is-danger',
-          duration: 5000
-        })
-      } finally {
-        this.regenFileId = 0
-        this.regenMode = ''
       }
     },
     async refreshSceneData (showDetails = false) {

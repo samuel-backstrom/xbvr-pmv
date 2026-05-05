@@ -393,7 +393,6 @@ export interface PMVImportResult {
   downloaded_path?: string
   file_id?: number
   scene_id?: string
-  funscript_generated?: boolean
   funscript_downloaded?: boolean
   skipped?: boolean
   message?: string
@@ -412,7 +411,7 @@ export interface PMVImportBatchResult {
   queued: number
   imported: number
   skipped_existing: number
-  funscripts_generated: number
+  funscripts_imported: number
   errors: number
   results: PMVImportBatchItem[]
 }

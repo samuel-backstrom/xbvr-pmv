@@ -28,14 +28,14 @@ func importPMVHavenFunscript(videoMeta scrape.PMVHavenVideoMetadata, videoFile *
 
 	targetPath := siblingFunscriptPath(videoFile.GetPath())
 	if fileExistsNonEmpty(targetPath) {
-		scriptFile, err := scanGeneratedScriptFile(targetPath, videoFile.VolumeID)
+		scriptFile, err := scanScriptFile(targetPath, videoFile.VolumeID)
 		if err != nil {
 			return false, err
 		}
 		db, _ := models.GetDB()
 		defer db.Close()
 
-		if _, err := linkGeneratedScriptToScene(db, videoFile, &scriptFile); err != nil {
+		if _, err := linkScriptToScene(db, videoFile, &scriptFile); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -60,7 +60,7 @@ func importPMVHavenFunscript(videoMeta scrape.PMVHavenVideoMetadata, videoFile *
 		return false, err
 	}
 
-	scriptFile, err := scanGeneratedScriptFile(targetPath, videoFile.VolumeID)
+	scriptFile, err := scanScriptFile(targetPath, videoFile.VolumeID)
 	if err != nil {
 		_ = os.Remove(targetPath)
 		return false, err
@@ -69,7 +69,7 @@ func importPMVHavenFunscript(videoMeta scrape.PMVHavenVideoMetadata, videoFile *
 	db, _ := models.GetDB()
 	defer db.Close()
 
-	if _, err := linkGeneratedScriptToScene(db, videoFile, &scriptFile); err != nil {
+	if _, err := linkScriptToScene(db, videoFile, &scriptFile); err != nil {
 		_ = os.Remove(targetPath)
 		return false, err
 	}
