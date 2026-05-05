@@ -317,24 +317,26 @@ func (o *Scene) UpdateStatus() {
 		anyVideoAccessible := false
 
 		for j := range files {
+			if !files[j].Exists() {
+				continue
+			}
+
 			totalFileSize = totalFileSize + files[j].Size
 
 			if files[j].Type == "script" {
 				scripts = scripts + 1
 
-				if files[j].Exists() && (files[j].CreatedTime.After(newestFileDate) || newestFileDate.IsZero()) {
+				if files[j].CreatedTime.After(newestFileDate) || newestFileDate.IsZero() {
 					newestFileDate = files[j].CreatedTime
 				}
 			}
 
 			if files[j].Type == "video" {
 				videos = videos + 1
-				if files[j].Exists() {
-					anyVideoAccessible = true
+				anyVideoAccessible = true
 
-					if files[j].CreatedTime.After(newestFileDate) || newestFileDate.IsZero() {
-						newestFileDate = files[j].CreatedTime
-					}
+				if files[j].CreatedTime.After(newestFileDate) || newestFileDate.IsZero() {
+					newestFileDate = files[j].CreatedTime
 				}
 			}
 		}
@@ -726,6 +728,7 @@ func QueryScenes(r RequestSceneList, enablePreload bool) ResponseSceneList {
 			Preload("Cast").
 			Preload("Tags").
 			Preload("Files").
+			Preload("Files.Volume").
 			Preload("History").
 			Preload("Cuepoints")
 	}

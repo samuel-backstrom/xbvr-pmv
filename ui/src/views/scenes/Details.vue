@@ -1114,6 +1114,8 @@ watch:{
         id: 'heh',
         onConfirm: () => {
           ky.post(`/api/files/unmatch`, {json:{file_id: file.id}}).json().then(data => {
+            this.$store.commit('sceneList/updateScene', data)
+            this.$store.dispatch('sceneList/load', { offset: 0 })
             this.showSceneOverlay({ scene: data })
           })
         }
@@ -1127,6 +1129,8 @@ watch:{
         hasIcon: true,
         onConfirm: () => {
           ky.delete(`/api/files/file/${file.id}`).json().then(data => {
+            this.$store.commit('sceneList/updateScene', data)
+            this.$store.dispatch('sceneList/load', { offset: 0 })
             this.showSceneOverlay({ scene: data })
           })
         }
